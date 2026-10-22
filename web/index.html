@@ -66,8 +66,13 @@
       margin-bottom: 14px; background: var(--panel-2);
     }
     .health-title {
+      display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
       font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
       color: var(--ink-dim); margin-bottom: 10px;
+    }
+    .health-note {
+      text-transform: none; letter-spacing: 0; font-style: italic; font-size: .72rem;
+      color: rgba(244, 255, 247, .4);
     }
     .health-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
     .health-row:last-child { margin-bottom: 0; }
@@ -89,14 +94,14 @@
     }
     .health.stale { opacity: .45; }
 
-    /* ---- layout: stage + agent activity side by side on wider screens --- */
+    /* ---- layout: player stats | stage | agent activity on wide screens --- */
     .main-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
-    @media (min-width: 860px) {
-      .main-grid { grid-template-columns: 1.7fr 1fr; align-items: start; }
+    @media (min-width: 1050px) {
+      .main-grid { grid-template-columns: .85fr 1.6fr 1fr; align-items: start; }
     }
 
-    /* ---- Agent Activity: the Spotter's real confirm/reject decisions ---- */
-    .activity-panel {
+    /* ---- shared panel chrome: player stats + agent activity ------------- */
+    .activity-panel, .player-stats-panel {
       border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2);
       padding: 12px 14px; max-height: 420px; overflow-y: auto;
     }
@@ -106,6 +111,25 @@
       color: var(--ink-dim); margin-bottom: 10px;
     }
     .activity-title span { font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
+
+    /* Player stats: tallied client-side from confirmed Agent Activity
+       entries (goal/big_chance/speed_milestone/foul -- whichever carry a
+       real player), not a separate data feed. */
+    .player-stat-row {
+      display: flex; align-items: center; gap: 8px; padding: 7px 0;
+      border-top: 1px solid var(--border); font-size: .82rem; animation: activity-in .3s ease;
+    }
+    .player-stat-row:first-child { border-top: none; }
+    .player-stat-name {
+      font-weight: 600; flex: 1; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .player-stat-team {
+      color: var(--ink-dim); font-size: .72rem; flex-shrink: 0; max-width: 84px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .player-stat-badges { display: flex; gap: 5px; flex-shrink: 0; font-size: .8rem; }
+    .empty-note { color: var(--ink-dim); font-size: .8rem; font-style: italic; }
     .activity-item {
       display: flex; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border);
       font-size: .82rem; animation: activity-in .3s ease;
@@ -292,7 +316,9 @@
     </div>
 
     <div class="health stale" id="health">
-      <div class="health-title">Match health · control</div>
+      <div class="health-title">Match health · control
+        <span class="health-note">Each team's own 0-100 score — not a split, both can be high or low</span>
+      </div>
       <div class="health-row">
         <span class="name" id="healthNameA">—</span>
         <div class="health-bar"><div class="health-fill" id="healthFillA"></div></div>
@@ -306,6 +332,11 @@
     </div>
 
     <div class="main-grid">
+    <div class="player-stats-panel">
+      <div class="activity-title">Player stats <span id="playerStatsCount">0 players</span></div>
+      <div id="playerStatsList"><div class="empty-note">Nobody's made the news yet…</div></div>
+    </div>
+
     <div class="stage">
       <svg class="pitch-lines" viewBox="0 0 1600 900" preserveAspectRatio="none" aria-hidden="true">
         <rect x="40" y="40" width="1520" height="820"></rect>
@@ -571,6 +602,44 @@
         </div>`;
       list.insertBefore(item, list.firstChild);
       while (list.children.length > 8) list.removeChild(list.lastChild);
+      updatePlayerStats(a);
+    }
+
+    // Player stats: tallied client-side from confirmed activity entries that
+    // name a real player -- not a separate telemetry feed (the match replay
+    // doesn't carry continuous per-player data, see the ambient-dots CSS
+    // comment above). goal/big_chance/speed_milestone/foul are the trigger
+    // kinds that carry a player; control_swing/pressing_spell are team-level.
+    const KIND_ICON = { goal: '⚽', big_chance: '🎯', speed_milestone: '⚡', yellow: '🟨', red: '🟥' };
+    const playerStats = new Map(); // player -> { team, counts: {kind: n}, lastSeen: "MM:SS" }
+    function toSeconds(clockStr) {
+      const [m, s] = clockStr.split(':').map(Number);
+      return m * 60 + s;
+    }
+    function updatePlayerStats(a) {
+      if (!a.player || !a.confirmed) return;
+      const key = a.kind === 'foul' ? (a.priority === 1 ? 'red' : 'yellow') : a.kind;
+      if (!KIND_ICON[key]) return; // team-level kinds (control_swing, pressing_spell): nothing to tally
+      const entry = playerStats.get(a.player) || { team: a.team, counts: {}, lastSeen: a.show_at };
+      entry.team = a.team;
+      entry.lastSeen = a.show_at;
+      entry.counts[key] = (entry.counts[key] || 0) + 1;
+      playerStats.set(a.player, entry);
+      renderPlayerStats();
+    }
+    function renderPlayerStats() {
+      const rows = [...playerStats.entries()].sort((x, y) => toSeconds(y[1].lastSeen) - toSeconds(x[1].lastSeen));
+      document.getElementById('playerStatsCount').textContent =
+        `${rows.length} player${rows.length === 1 ? '' : 's'}`;
+      document.getElementById('playerStatsList').innerHTML = rows.length
+        ? rows.map(([player, e]) => `
+          <div class="player-stat-row">
+            <div class="player-stat-name">${player}</div>
+            <div class="player-stat-team">${e.team}</div>
+            <div class="player-stat-badges">${Object.entries(e.counts)
+              .map(([k, n]) => `<span title="${k}">${KIND_ICON[k]} ${n}</span>`).join('')}</div>
+          </div>`).join('')
+        : '<div class="empty-note">Nobody\'s made the news yet…</div>';
     }
 
     // Local dev path (file://): the local preview server from
