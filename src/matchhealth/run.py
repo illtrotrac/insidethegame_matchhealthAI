@@ -17,16 +17,23 @@ from matchhealth.agents.publisher import console_publish
 from matchhealth.engine.thresholds import ThresholdDetector
 from matchhealth.replay.generator import MatchConfig, generate_match
 from matchhealth.replay.replayer import replay
-from matchhealth.shared.state import InMemoryStore
+from matchhealth.shared.state import InMemoryStore, StateStore
 
 
-async def main(seed: int, speed: float, preview: bool = False) -> InMemoryStore:
+async def main(seed: int, speed: float, preview: bool = False) -> StateStore:
     cfg = MatchConfig(seed=seed)
     events = generate_match(cfg)
     home, away = cfg.teams
     detector = ThresholdDetector((home.name, away.name),
                                  {home.name: home.attacking_right, away.name: away.attacking_right})
-    store = InMemoryStore()
+
+    if os.environ.get("COSMOS_ENDPOINT"):
+        from matchhealth.shared.state import CosmosStore
+        match_id = f"seed-{seed}"  # stable per seed: reruns overwrite rather than pile up
+        store = CosmosStore(match_id)
+        print(f"Using Cosmos DB shared state (match_id={match_id})")
+    else:
+        store = InMemoryStore()
 
     llm = None
     if not mock_enabled():
