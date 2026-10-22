@@ -80,13 +80,16 @@ class Personaliser:
         if mock_enabled() or self.llm is None:
             variants = []
             for p in personas:
+                mode = p.get("mode", "base")
                 head = base.headline
-                if p.get("mode") == "casual":
-                    head = head.replace("control score", "grip on the game")
+                if mode == "casual":
+                    head = _casualize(head)
+                elif mode == "analyst":
+                    head = _analystify(head, base.stats)
                 if p.get("language", "en") != "en":
                     head = f"[{p['language']}] {head}"
                 variants.append(base.model_copy(update={
-                    "headline": head[:80], "mode": p.get("mode", "base"),
+                    "headline": head[:80], "mode": mode,
                     "language": p.get("language", "en"),
                     "focus_player": p.get("favourite_player") or base.focus_player}))
             return variants
@@ -99,6 +102,37 @@ class Personaliser:
 
 
 # --- helpers ---------------------------------------------------------------
+
+_CASUAL_SWAPS = [
+    ("have seized control", "are running the show"),
+    ("scores for", "nets one for"),
+    ("Big chance for", "Huge chance for"),
+    ("shot quality", "chance quality"),
+    ("press is breaking", "press is wrecking"),
+    ("Rocket from", "Screamer from"),
+]
+
+
+def _casualize(headline: str) -> str:
+    """mode='casual': plain, energetic, no jargon (see prompts/personaliser.md).
+    Guaranteed to visibly differ from the base headline even when none of the
+    swap phrases match -- the fallback was a bare substring match that quietly
+    never fired for most mock headlines, so casual/analyst looked identical."""
+    for old, new in _CASUAL_SWAPS:
+        if old in headline:
+            return headline.replace(old, new)
+    return headline.rstrip(".") + "!"
+
+
+def _analystify(headline: str, stats: list) -> str:
+    """mode='analyst': precise, tactical, keep numbers -- surface the leading
+    stat inline so the headline reads as data-backed, not just restyled."""
+    for s in stats:
+        if s.value is not None:
+            return f"{headline.rstrip('.')} ({s.label}: {s.value})"
+        if s.from_ is not None and s.to is not None:
+            return f"{headline.rstrip('.')} ({s.from_}->{s.to})"
+    return headline
 
 def _template_for(trig: Trigger) -> str:
     return {"big_chance": "big_chance", "goal": "big_chance",
