@@ -32,7 +32,7 @@
       }
     },
     "focus_player": {"type": ["string", "null"]},
-    "mode": {"enum": ["base", "analyst", "casual"], "default": "base"},
+    "mode": {"enum": ["base", "analyst", "casual", "fan"], "default": "base"},
     "language": {"type": "string", "default": "en"}
   }
 }

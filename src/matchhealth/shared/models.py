@@ -78,7 +78,7 @@ class Overlay(BaseModel):
     subline: str | None = Field(default=None, max_length=90)
     stats: list[OverlayStat] = Field(default_factory=list, max_length=3)
     focus_player: str | None = None
-    mode: Literal["base", "analyst", "casual"] = "base"
+    mode: Literal["base", "analyst", "casual", "fan"] = "base"
     language: str = "en"
 
     def to_wire(self) -> dict:

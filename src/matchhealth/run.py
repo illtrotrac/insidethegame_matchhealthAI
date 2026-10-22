@@ -12,7 +12,7 @@ import os
 from dotenv import load_dotenv
 
 from matchhealth.agents.llm import mock_enabled
-from matchhealth.agents.orchestrator import Orchestrator
+from matchhealth.agents.orchestrator import DEFAULT_PERSONAS, Orchestrator
 from matchhealth.agents.publisher import console_publish
 from matchhealth.engine.thresholds import ThresholdDetector
 from matchhealth.replay.generator import MatchConfig, generate_match
@@ -23,7 +23,8 @@ from matchhealth.shared.state import InMemoryStore, StateStore
 HEALTH_TICK_EVERY = 10  # publish a live control/chaos snapshot every N events
 
 
-async def main(seed: int, speed: float, preview: bool = False) -> StateStore:
+async def main(seed: int, speed: float, preview: bool = False,
+                favourite_player: str | None = None) -> StateStore:
     cfg = MatchConfig(seed=seed)
     events = generate_match(cfg)
     home, away = cfg.teams
@@ -68,7 +69,17 @@ async def main(seed: int, speed: float, preview: bool = False) -> StateStore:
         for p in publishers:
             await p(base, variants)
 
-    crew = Orchestrator(store, publish, llm)
+    personas = list(DEFAULT_PERSONAS)
+    if favourite_player:
+        # "Favourite club(s), favourite player(s), player focused mode" is an
+        # explicit required capability in the hackathon brief's Personalize
+        # stage -- this is the whole viewer-configurable end of it. Variants
+        # for every persona are still computed once per moment and broadcast
+        # to everyone (cost doesn't scale with audience size); this is one
+        # more precomputed variant, not a per-viewer request.
+        personas.append({"mode": "fan", "language": "en", "favourite_player": favourite_player})
+        print(f"Fan mode following: {favourite_player}")
+    crew = Orchestrator(store, publish, llm, personas=personas)
     print(f"{home.name} vs {away.name} — {len(events)} synthetic events, mock={mock_enabled()}")
     tick = 0
     async for ev in replay(events, speed=speed):
@@ -94,8 +105,10 @@ def cli() -> None:
     p.add_argument("--speed", type=float, default=0, help="1 = real time, 0 = as fast as possible")
     p.add_argument("--preview", action="store_true",
                     help="Serve overlays to web/index.html over a local WebSocket (no Azure)")
+    p.add_argument("--favourite-player", default="E. Novak",
+                    help="Adds a 'fan' persona following this player; empty string disables it")
     args = p.parse_args()
-    asyncio.run(main(args.seed, args.speed, args.preview))
+    asyncio.run(main(args.seed, args.speed, args.preview, args.favourite_player or None))
 
 
 if __name__ == "__main__":

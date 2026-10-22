@@ -81,17 +81,26 @@ class Personaliser:
             variants = []
             for p in personas:
                 mode = p.get("mode", "base")
+                fav = p.get("favourite_player")
+                # Only claim this moment is "about" the fan's player when it
+                # genuinely is -- don't relabel an unrelated moment as theirs
+                # just because a favourite_player persona exists.
+                involves_fav = bool(fav) and base.focus_player == fav
                 head = base.headline
                 if mode == "casual":
                     head = _casualize(head)
                 elif mode == "analyst":
                     head = _analystify(head, base.stats)
+                elif mode == "fan":
+                    head = _casualize(head)
+                    head = (f"{fav}'s moment: {head}" if involves_fav
+                            else f"Following {fav}: {head}")
                 if p.get("language", "en") != "en":
                     head = f"[{p['language']}] {head}"
                 variants.append(base.model_copy(update={
                     "headline": head[:80], "mode": mode,
                     "language": p.get("language", "en"),
-                    "focus_player": p.get("favourite_player") or base.focus_player}))
+                    "focus_player": fav if involves_fav else base.focus_player}))
             return variants
         data = await self.llm.complete_json(
             load_prompt("personaliser"),
