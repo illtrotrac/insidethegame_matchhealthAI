@@ -46,6 +46,12 @@ class ThresholdDetector:
         if ev.type == "goal":
             out.append(self._fire("goal", ev, ev.team, {"scorer": ev.player}))
 
+        if ev.type == "foul" and ev.outcome in ("yellow", "red"):
+            # Only carded fouls become a story -- a ref waving play on for a
+            # routine foul isn't worth interrupting a casual viewer for, but
+            # "why did the ref just show a card?" genuinely is.
+            out.append(self._fire("foul", ev, ev.team, {"card": ev.outcome}))
+
         if ev.type == "shot":
             q = shot_quality(ev, self._goal_x(ev.team, ev.t))
             if q >= BIG_CHANCE_QUALITY:

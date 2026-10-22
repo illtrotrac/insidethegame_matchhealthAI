@@ -132,6 +132,15 @@ def generate_match(cfg: MatchConfig | None = None) -> list[MatchEvent]:
                 x, y = nx, ny
                 continue
 
+            # Foul: ref stops play. Fouled team (in_poss) keeps the ball via
+            # a free kick -- no turnover this time. Occasionally a card.
+            if rng.random() < 0.12:
+                severity = rng.random()
+                card = "red" if severity > 0.985 else "yellow" if severity > 0.85 else "clean"
+                emit(t=t + 0.5, type="foul", team=opp.name, player=rng.choice(opp.players[1:]),
+                     x=round(nx, 1), y=round(ny, 1), outcome=card)
+                continue
+
             # Turnover: sometimes via a tackle
             if rng.random() < 0.4:
                 emit(t=t + 0.5, type="tackle", team=opp.name, player=rng.choice(opp.players[1:]),

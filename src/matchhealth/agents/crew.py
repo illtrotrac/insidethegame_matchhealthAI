@@ -8,7 +8,16 @@ from matchhealth.agents.llm import LLMClient, load_prompt, mock_enabled
 from matchhealth.shared.models import Explanation, Overlay, Trigger, clock
 
 PRIORITY = {"goal": 1, "big_chance": 1, "control_swing": 2, "pressing_spell": 2,
-            "speed_milestone": 3}
+            "speed_milestone": 3, "foul": 2}
+
+MOCK_REASON = {
+    "goal": "Goal: always the story",
+    "big_chance": "High-quality chance created",
+    "control_swing": "Clear momentum shift",
+    "pressing_spell": "Sustained pressing spell",
+    "speed_milestone": "Notable speed/power moment",
+    "foul": "Card shown: real consequence",
+}
 
 
 class Spotter:
@@ -19,7 +28,17 @@ class Spotter:
 
     async def run(self, trig: Trigger, recent: list[dict]) -> dict:
         if mock_enabled() or self.llm is None:
-            return {"confirm": True, "priority": PRIORITY[trig.kind]}
+            # Always confirms, by design: the engine's per-(kind, team) cooldown
+            # (see thresholds.py) already filters near-duplicate stories before
+            # a Trigger ever reaches the Spotter, so there's nothing left to
+            # reject deterministically here. The real LLM Spotter (prompts/
+            # spotter.md) does genuinely reject repeats with its own reasoning
+            # -- this mock path is a stand-in, not a claim that confirm=True
+            # is the real decision logic.
+            priority = PRIORITY[trig.kind]
+            if trig.kind == "foul" and trig.facts.get("card") == "red":
+                priority = 1  # a red card is a game-changing moment, not routine
+            return {"confirm": True, "priority": priority, "reason": MOCK_REASON[trig.kind]}
         return await self.llm.complete_json(
             load_prompt("spotter"), {"trigger": trig.model_dump(), "recent": recent}, "nano")
 
@@ -119,6 +138,8 @@ _CASUAL_SWAPS = [
     ("shot quality", "chance quality"),
     ("press is breaking", "press is wrecking"),
     ("Rocket from", "Screamer from"),
+    ("is shown a yellow card for", "picks up a yellow for"),
+    ("is shown a red card for", "sees red for"),
 ]
 
 
@@ -146,13 +167,15 @@ def _analystify(headline: str, stats: list) -> str:
 def _template_for(trig: Trigger) -> str:
     return {"big_chance": "big_chance", "goal": "big_chance",
             "control_swing": "momentum_chart", "pressing_spell": "lower_third_stat",
-            "speed_milestone": "player_tag"}[trig.kind]
+            "speed_milestone": "player_tag", "foul": "lower_third_stat"}[trig.kind]
 
 
 def _facts_to_stats(trig: Trigger) -> list[dict]:
     f = trig.facts
     if "control_from" in f:
         return [{"label": "Control score", "from": f["control_from"], "to": f["control_to"]}]
+    if "card" in f:
+        return [{"label": "Card shown", "value": f["card"].capitalize()}]
     return [{"label": k.replace("_", " ").capitalize(), "value": v}
             for k, v in f.items() if isinstance(v, (int, float))]
 
@@ -167,4 +190,6 @@ def _mock_why(trig: Trigger) -> str:
         "pressing_spell": (f"{trig.team}'s press is breaking the opponent's rhythm. "
                            f"{f.get('turnovers_forced_5min')} turnovers in 5 minutes."),
         "speed_milestone": f"Rocket from {trig.player}: {f.get('shot_speed_kmh')} km/h.",
+        "foul": (f"{trig.player} is shown a {f.get('card')} card for {trig.team}. "
+                f"Free kick to the opposition."),
     }[trig.kind]

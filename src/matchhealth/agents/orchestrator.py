@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 
 from matchhealth.agents.crew import Analyst, Personaliser, Producer, Spotter
 from matchhealth.agents.llm import LLMClient
-from matchhealth.shared.models import Overlay, Trigger
+from matchhealth.shared.models import Overlay, Trigger, clock
 from matchhealth.shared.state import StateStore
 
 log = logging.getLogger(__name__)
@@ -22,14 +22,17 @@ DEFAULT_PERSONAS = [
 ]
 
 Publish = Callable[[Overlay, list[Overlay]], Awaitable[None]]
+ActivitySend = Callable[[dict], Awaitable[None]]
 
 
 class Orchestrator:
     def __init__(self, store: StateStore, publish: Publish, llm: LLMClient | None = None,
-                 personas: list[dict] | None = None) -> None:
+                 personas: list[dict] | None = None,
+                 activity_send: ActivitySend | None = None) -> None:
         self.store = store
         self.publish = publish
         self.personas = personas or DEFAULT_PERSONAS
+        self.activity_send = activity_send
         self.spotter, self.analyst = Spotter(llm), Analyst(llm)
         self.producer, self.personaliser = Producer(llm), Personaliser(llm)
 
@@ -38,7 +41,17 @@ class Orchestrator:
 
         verdict = await self.spotter.run(trig, recent=self.store.moments()[-5:])
         self.store.put(trig.moment_id, "spotter", verdict)
-        if not verdict.get("confirm", False):
+        confirmed = bool(verdict.get("confirm", False))
+        if self.activity_send:
+            # Broadcasts every Spotter decision, confirmed or not -- this is
+            # the real multi-agent decision, not a simplified summary of it.
+            await self.activity_send({
+                "moment_id": trig.moment_id, "kind": trig.kind, "team": trig.team,
+                "player": trig.player, "show_at": clock(trig.t),
+                "priority": verdict.get("priority"), "confirmed": confirmed,
+                "reason": verdict.get("reason"),
+            })
+        if not confirmed:
             return None
         priority = int(verdict.get("priority", 2))
 

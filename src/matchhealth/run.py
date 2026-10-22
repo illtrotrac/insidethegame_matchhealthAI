@@ -46,7 +46,7 @@ async def main(seed: int, speed: float, preview: bool = False,
 
     preview_server = None
     publishers = [console_publish]
-    health_send = None
+    raw_send = None  # carries health ticks, score updates, agent activity -- all {"...": ...} dicts
     if preview:
         from matchhealth.agents.local_preview import LocalPreviewServer
         preview_server = LocalPreviewServer()
@@ -59,11 +59,11 @@ async def main(seed: int, speed: float, preview: bool = False,
         else:
             print("Browser connected — starting the match.")
             publishers.append(preview_server.publish)
-            health_send = preview_server.broadcast_raw
+            raw_send = preview_server.broadcast_raw
     elif os.environ.get("WEBPUBSUB_ENDPOINT"):
         from matchhealth.agents.publisher import webpubsub_health_sender, webpubsub_publisher
         publishers.append(webpubsub_publisher())
-        health_send = webpubsub_health_sender()
+        raw_send = webpubsub_health_sender()
 
     async def publish(base, variants) -> None:
         for p in publishers:
@@ -79,20 +79,31 @@ async def main(seed: int, speed: float, preview: bool = False,
         # more precomputed variant, not a per-viewer request.
         personas.append({"mode": "fan", "language": "en", "favourite_player": favourite_player})
         print(f"Fan mode following: {favourite_player}")
-    crew = Orchestrator(store, publish, llm, personas=personas)
+    crew = Orchestrator(store, publish, llm, personas=personas, activity_send=raw_send)
     print(f"{home.name} vs {away.name} — {len(events)} synthetic events, mock={mock_enabled()}")
+
+    score = {home.name: 0, away.name: 0}
+
+    async def send_health(ev) -> None:
+        snap = detector.engine.snapshot()
+        await raw_send({
+            "show_at": clock(ev.t),
+            "teams": {t: snap[t].model_dump() for t in (home.name, away.name)},
+            "score": dict(score),
+        })
+
     tick = 0
     async for ev in replay(events, speed=speed):
+        if ev.type == "goal":
+            score[ev.team] += 1
+            if raw_send:
+                await send_health(ev)  # don't wait for the next periodic tick on a goal
         for trig in detector.process(ev):
             await crew.handle(trig)
         tick += 1
-        if health_send and tick % HEALTH_TICK_EVERY == 0:
-            snap = detector.engine.snapshot()
-            await health_send({
-                "show_at": clock(ev.t),
-                "teams": {t: snap[t].model_dump() for t in (home.name, away.name)},
-            })
-    print(f"Full time. {len(store.moments())} moments produced.")
+        if raw_send and tick % HEALTH_TICK_EVERY == 0:
+            await send_health(ev)
+    print(f"Full time. {len(store.moments())} moments produced. Final score: {score}")
     if preview_server:
         await preview_server.close()
     return store

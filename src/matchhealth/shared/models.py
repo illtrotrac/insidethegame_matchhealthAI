@@ -11,7 +11,9 @@ EventType = Literal[
     "foul", "goal", "half_time", "full_time",
 ]
 
-TriggerKind = Literal["control_swing", "big_chance", "pressing_spell", "speed_milestone", "goal"]
+TriggerKind = Literal[
+    "control_swing", "big_chance", "pressing_spell", "speed_milestone", "goal", "foul",
+]
 
 Template = Literal[
     "lower_third_stat", "player_tag", "stat_compare", "momentum_chart",
