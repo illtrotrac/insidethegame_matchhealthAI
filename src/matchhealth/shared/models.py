@@ -13,6 +13,7 @@ EventType = Literal[
 
 TriggerKind = Literal[
     "control_swing", "big_chance", "pressing_spell", "speed_milestone", "goal", "foul",
+    "pass_quality",
 ]
 
 Template = Literal[

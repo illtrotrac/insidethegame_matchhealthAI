@@ -8,7 +8,7 @@ from matchhealth.agents.llm import LLMClient, load_prompt, mock_enabled
 from matchhealth.shared.models import Explanation, Overlay, Trigger, clock
 
 PRIORITY = {"goal": 1, "big_chance": 1, "control_swing": 2, "pressing_spell": 2,
-            "speed_milestone": 3, "foul": 2}
+            "speed_milestone": 3, "foul": 2, "pass_quality": 3}
 
 MOCK_REASON = {
     "goal": "Goal: always the story",
@@ -17,6 +17,7 @@ MOCK_REASON = {
     "pressing_spell": "Sustained pressing spell",
     "speed_milestone": "Notable speed/power moment",
     "foul": "Card shown: real consequence",
+    "pass_quality": "Defense-splitting pass",
 }
 
 
@@ -65,11 +66,18 @@ class Producer:
 
     async def run(self, trig: Trigger, expl: Explanation, priority: int) -> Overlay:
         if mock_enabled() or self.llm is None:
+            # expl.why is "<insight>. <evidence/consequence>." (see
+            # prompts/analyst.md). Only the first sentence was ever used --
+            # subline was hardcoded to None -- so any second sentence (e.g.
+            # a foul's "Free kick to the opposition") was silently dropped
+            # for every trigger kind, not just fouls.
+            sentences = re.split(r"(?<=[a-z0-9])\.\s", expl.why)
+            subline = " ".join(sentences[1:]).rstrip(".").strip()[:90] or None
             return Overlay(
                 moment_id=trig.moment_id, template=_template_for(trig), show_at=clock(trig.t),
                 duration_s=8 if priority == 1 else 7, priority=priority,
-                headline=re.split(r"(?<=[a-z0-9])\.\s", expl.why)[0].rstrip(".")[:80],
-                subline=None,
+                headline=sentences[0].rstrip(".")[:80],
+                subline=subline,
                 stats=expl.key_stats[:3], focus_player=trig.player,
             )
         data = await self.llm.complete_json(
@@ -140,6 +148,7 @@ _CASUAL_SWAPS = [
     ("Rocket from", "Screamer from"),
     ("is shown a yellow card for", "picks up a yellow for"),
     ("is shown a red card for", "sees red for"),
+    ("threads a", "slices open the defense with a"),
 ]
 
 
@@ -167,7 +176,8 @@ def _analystify(headline: str, stats: list) -> str:
 def _template_for(trig: Trigger) -> str:
     return {"big_chance": "big_chance", "goal": "big_chance",
             "control_swing": "momentum_chart", "pressing_spell": "lower_third_stat",
-            "speed_milestone": "player_tag", "foul": "lower_third_stat"}[trig.kind]
+            "speed_milestone": "player_tag", "foul": "lower_third_stat",
+            "pass_quality": "player_tag"}[trig.kind]
 
 
 def _facts_to_stats(trig: Trigger) -> list[dict]:
@@ -176,6 +186,10 @@ def _facts_to_stats(trig: Trigger) -> list[dict]:
         return [{"label": "Control score", "from": f["control_from"], "to": f["control_to"]}]
     if "card" in f:
         return [{"label": "Card shown", "value": f["card"].capitalize()}]
+    if "pass_difficulty" in f:
+        return [{"label": "Pass distance", "value": f.get("pass_distance_m"), "unit": "m"},
+                {"label": "Difficulty rating", "value": f["pass_difficulty"]},
+                {"label": "Ball speed", "value": f.get("pass_speed_kmh"), "unit": "km/h"}]
     return [{"label": k.replace("_", " ").capitalize(), "value": v}
             for k, v in f.items() if isinstance(v, (int, float))]
 
@@ -190,6 +204,8 @@ def _mock_why(trig: Trigger) -> str:
         "pressing_spell": (f"{trig.team}'s press is breaking the opponent's rhythm. "
                            f"{f.get('turnovers_forced_5min')} turnovers in 5 minutes."),
         "speed_milestone": f"Rocket from {trig.player}: {f.get('shot_speed_kmh')} km/h.",
-        "foul": (f"{trig.player} is shown a {f.get('card')} card for {trig.team}. "
-                f"Free kick to the opposition."),
+        "foul": (f"{trig.player} is shown a {f.get('card')} card for {f.get('foul_type')} "
+                f"against {trig.team}. Free kick to {f.get('fouled_team')}."),
+        "pass_quality": (f"{trig.player} threads a {f.get('pass_distance_m')}m pass for "
+                         f"{trig.team} (difficulty {f.get('pass_difficulty')})."),
     }[trig.kind]

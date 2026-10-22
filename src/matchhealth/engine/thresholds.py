@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import deque
 
 from matchhealth.engine.health import HealthEngine
-from matchhealth.engine.stats import shot_quality
+from matchhealth.engine.stats import pass_difficulty, pass_distance, shot_quality
 from matchhealth.shared.models import MatchEvent, Trigger
 
 CONTROL_SWING = 30.0       # points of control score within the lookback
@@ -14,7 +14,16 @@ BIG_CHANCE_QUALITY = 0.35
 PRESSING_TURNOVERS = 3     # x2 = minimum forced turnovers in the health window
 PRESSING_RATIO = 1.6       # ...and this many times the opponent's count
 SHOT_SPEED_KMH = 110
+PASS_QUALITY_DIFFICULTY = 0.55  # pass_difficulty() tops out ~0.7 without a pressure bonus
 COOLDOWN_S = 300           # per (kind, team), avoids alert storms
+
+# The generator doesn't categorize *why* a foul happened (see generator.py),
+# so this is deterministic flavour text, not a real classification -- picked
+# from the event id, not fabricated per-event detail the Analyst would have
+# to invent. Good enough to give a casual viewer an actual "why", not just
+# "a card happened".
+FOUL_TYPES = ["a late challenge", "a reckless tackle", "a trip", "a shirt pull",
+              "a mistimed challenge", "a foul in the build-up"]
 
 
 class ThresholdDetector:
@@ -50,7 +59,27 @@ class ThresholdDetector:
             # Only carded fouls become a story -- a ref waving play on for a
             # routine foul isn't worth interrupting a casual viewer for, but
             # "why did the ref just show a card?" genuinely is.
-            out.append(self._fire("foul", ev, ev.team, {"card": ev.outcome}))
+            fouled_team = next(t for t in self.teams if t != ev.team)
+            out.append(self._fire("foul", ev, ev.team, {
+                "card": ev.outcome,
+                "foul_type": FOUL_TYPES[ev.id % len(FOUL_TYPES)],
+                "fouled_team": fouled_team,
+            }))
+
+        if ev.type == "pass" and ev.outcome == "success":
+            # Pass quality: distance, accuracy (implicit -- only successful
+            # passes fire) and a difficulty rating. pass_difficulty() was
+            # already computed as a hidden input to the control score
+            # (health.py) but never surfaced as its own stat anywhere --
+            # the brief names this explicitly as a required metric.
+            diff = pass_difficulty(ev)
+            if diff is not None and diff >= PASS_QUALITY_DIFFICULTY:
+                dist = pass_distance(ev)
+                out.append(self._fire("pass_quality", ev, ev.team, {
+                    "pass_distance_m": round(dist, 1) if dist is not None else None,
+                    "pass_difficulty": diff,
+                    "pass_speed_kmh": ev.speed_kmh,
+                }))
 
         if ev.type == "shot":
             q = shot_quality(ev, self._goal_x(ev.team, ev.t))

@@ -84,6 +84,21 @@ async def main(seed: int, speed: float, preview: bool = False,
     print(f"{home.name} vs {away.name} — {len(events)} synthetic events, mock={mock_enabled()}")
 
     score = {home.name: 0, away.name: 0}
+    # Per-player pass attempts/completions -- "pass accuracy" is named
+    # explicitly in the brief, but nothing tracked it per player before (only
+    # a team-level completion % existed, in HealthSnapshot). Every pass
+    # updates this, not just the rare high-difficulty ones that fire a
+    # pass_quality trigger -- this is meant to be a genuine running stat.
+    player_passes: dict[str, dict] = {}
+
+    def record_pass(ev) -> None:
+        if ev.type != "pass" or not ev.player:
+            return
+        entry = player_passes.setdefault(
+            ev.player, {"team": ev.team, "attempts": 0, "completions": 0})
+        entry["attempts"] += 1
+        if ev.outcome == "success":
+            entry["completions"] += 1
 
     async def send_health(t: float) -> None:
         snap = detector.engine.snapshot()
@@ -91,6 +106,7 @@ async def main(seed: int, speed: float, preview: bool = False,
             "show_at": clock(t),
             "teams": {t2: snap[t2].model_dump() for t2 in (home.name, away.name)},
             "score": dict(score),
+            "player_passes": player_passes,
         })
 
     if raw_send:
@@ -101,6 +117,7 @@ async def main(seed: int, speed: float, preview: bool = False,
 
     tick = 0
     async for ev in replay(events, speed=speed):
+        record_pass(ev)
         if ev.type == "goal":
             score[ev.team] += 1
             if raw_send:

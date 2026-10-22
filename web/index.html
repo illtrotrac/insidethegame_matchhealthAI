@@ -18,9 +18,10 @@
       --control: #22c55e;   /* in-possession, calm; also "team A" */
       --away: #38bdf8;      /* "team B" in the health meter, for a clear vs */
       --chaos: #f59e0b;     /* pressure, turnovers */
-      --gold: #fbbf24;      /* big moments */
+      --gold: #fbbf24;      /* big moments / priority -- this one meaning only */
       --info: #38bdf8;      /* comparisons */
       --muted: #94a3b8;     /* fallback / degraded */
+      --focus: #c4b5fd;     /* "you selected this" -- distinct from gold's priority meaning */
       --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
     }
     * { box-sizing: border-box; }
@@ -50,14 +51,17 @@
       font-size: .85rem; border: 1px solid var(--border); border-radius: 999px;
       padding: 2px 10px; font-family: -apple-system, system-ui, sans-serif;
     }
-    .controls { display: flex; gap: 10px; }
+    /* Deliberately muted: these are configuration, not content -- the match
+       itself should lead, not compete with the dropdowns for attention. */
+    .controls { display: flex; gap: 8px; opacity: .72; transition: opacity .15s; }
+    .controls:hover, .controls:focus-within { opacity: 1; }
     .controls label {
-      display: flex; align-items: center; gap: 6px; font-size: .78rem;
-      color: var(--ink-dim); text-transform: uppercase; letter-spacing: .04em;
+      display: flex; align-items: center; gap: 4px; font-size: .68rem;
+      color: var(--ink-dim); text-transform: uppercase; letter-spacing: .03em;
     }
     .controls select {
-      background: var(--panel-2); color: var(--ink); border: 1px solid var(--border);
-      border-radius: 6px; padding: 4px 8px; font: inherit;
+      background: transparent; color: var(--ink-dim); border: 1px solid var(--border);
+      border-radius: 5px; padding: 2px 6px; font: inherit; font-size: .72rem;
     }
 
     /* ---- match health meter: the actual point of this project ---------- */
@@ -74,12 +78,13 @@
       text-transform: none; letter-spacing: 0; font-style: italic; font-size: .72rem;
       color: rgba(244, 255, 247, .4);
     }
-    .health-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .health-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
     .health-row:last-child { margin-bottom: 0; }
     .health-row .name { width: 150px; font-size: .85rem; flex-shrink: 0;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .health-bar-wrap { flex: 1; display: flex; flex-direction: column; gap: 4px; }
     .health-bar {
-      flex: 1; height: 10px; border-radius: 999px; background: rgba(255,255,255,.08);
+      height: 10px; border-radius: 999px; background: rgba(255,255,255,.08);
       overflow: hidden; position: relative;
     }
     .health-fill {
@@ -87,6 +92,9 @@
       width: 50%; transition: width .6s ease;
     }
     .health-row.away .health-fill { background: var(--away); }
+    .health-sub {
+      font-size: .7rem; color: var(--ink-dim); font-variant-numeric: tabular-nums;
+    }
     .health-num {
       width: 42px; text-align: right; font-variant-numeric: tabular-nums;
       font-family: var(--display); font-weight: 700; font-size: 1rem;
@@ -117,8 +125,12 @@
        entries (goal/big_chance/speed_milestone/foul -- whichever carry a
        real player), not a separate data feed. */
     .player-stat-row {
+      /* No entrance animation here (unlike .activity-item): this list's
+         innerHTML gets fully rebuilt on every health tick (every 5 events),
+         not just when a row is genuinely new -- animating on every rebuild
+         made the whole panel visibly flicker. */
       display: flex; align-items: center; gap: 8px; padding: 7px 0;
-      border-top: 1px solid var(--border); font-size: .82rem; animation: activity-in .3s ease;
+      border-top: 1px solid var(--border); font-size: .82rem;
     }
     .player-stat-row:first-child { border-top: none; }
     .player-stat-name {
@@ -130,7 +142,24 @@
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .player-stat-badges { display: flex; gap: 5px; flex-shrink: 0; font-size: .8rem; }
+    .player-stat-metrics {
+      display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+      flex-shrink: 0; font-size: .7rem; font-variant-numeric: tabular-nums;
+      color: var(--ink-dim); min-width: 68px; margin-right: 4px;
+    }
+    .player-stat-row.focused {
+      background: rgba(196,181,253,.1); margin-inline: -8px; padding-inline: 8px;
+      border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(196,181,253,.4);
+    }
+    .player-stat-row.focused .player-stat-name { color: var(--focus); }
+    .player-stat-row.dimmed { opacity: .4; }
     .empty-note { color: var(--ink-dim); font-size: .8rem; font-style: italic; }
+    .show-all-btn {
+      display: block; width: 100%; margin-top: 8px; padding: 6px;
+      background: none; border: 1px dashed var(--border); border-radius: 6px;
+      color: var(--ink-dim); font: inherit; font-size: .74rem; cursor: pointer;
+    }
+    .show-all-btn:hover { color: var(--ink); border-color: var(--ink-dim); }
     .activity-item {
       display: flex; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border);
       font-size: .82rem; animation: activity-in .3s ease;
@@ -223,9 +252,9 @@
     /* "Focus" selector: highlight whichever overlay is genuinely about the
        chosen player (compares the real base.focus_player, not variant text). */
     .overlay.focused {
-      border-left-color: var(--gold); box-shadow: 0 0 0 2px rgba(251,191,36,.5), 0 8px 24px rgba(0,0,0,.4);
+      border-left-color: var(--focus); box-shadow: 0 0 0 2px rgba(196,181,253,.5), 0 8px 24px rgba(0,0,0,.4);
     }
-    .overlay.focused .tag::after { content: '· ★ following'; margin-left: 4px; color: var(--gold); }
+    .overlay.focused .tag::after { content: '· ★ following'; margin-left: 4px; color: var(--focus); }
 
     /* ---- overlay card: shared base, then per-template overrides -------- */
     .overlay {
@@ -322,12 +351,18 @@
       </div>
       <div class="health-row">
         <span class="name" id="healthNameA">—</span>
-        <div class="health-bar"><div class="health-fill" id="healthFillA"></div></div>
+        <div class="health-bar-wrap">
+          <div class="health-bar"><div class="health-fill" id="healthFillA"></div></div>
+          <div class="health-sub" id="healthSubA">Possession — · Pass completion —</div>
+        </div>
         <span class="health-num" id="healthNumA">—</span>
       </div>
       <div class="health-row away">
         <span class="name" id="healthNameB">—</span>
-        <div class="health-bar"><div class="health-fill" id="healthFillB"></div></div>
+        <div class="health-bar-wrap">
+          <div class="health-bar"><div class="health-fill" id="healthFillB"></div></div>
+          <div class="health-sub" id="healthSubB">Possession — · Pass completion —</div>
+        </div>
         <span class="health-num" id="healthNumB">—</span>
       </div>
     </div>
@@ -372,7 +407,7 @@
         <div id="activityList"></div>
       </div>
       <div class="player-stats-panel">
-        <div class="activity-title">Player stats <span id="playerStatsCount">0 players</span></div>
+        <div class="activity-title"><span id="playerStatsTitle">Player stats</span> <span id="playerStatsCount">0 players</span></div>
         <div id="playerStatsList"><div class="empty-note">Nobody's made the news yet…</div></div>
       </div>
     </div>
@@ -575,12 +610,31 @@
       const [a, b] = teamNames.map(n => msg.teams[n]);
       document.getElementById('healthFillA').style.width = `${a.control}%`;
       document.getElementById('healthNumA').textContent = a.control.toFixed(0);
+      document.getElementById('healthSubA').textContent =
+        `Possession ${a.possession_pct.toFixed(0)}% · Pass completion ${a.pass_completion_pct.toFixed(0)}%`;
       document.getElementById('healthFillB').style.width = `${b.control}%`;
       document.getElementById('healthNumB').textContent = b.control.toFixed(0);
+      document.getElementById('healthSubB').textContent =
+        `Possession ${b.possession_pct.toFixed(0)}% · Pass completion ${b.pass_completion_pct.toFixed(0)}%`;
       if (msg.score) {
         document.getElementById('score').textContent =
           `${msg.score[teamNames[0]]} – ${msg.score[teamNames[1]]}`;
       }
+      mergePassStats(msg.player_passes);
+    }
+
+    // Per-player pass attempts/completions -- a real running stat (every
+    // pass, not just the rare high-difficulty ones that fire a pass_quality
+    // moment), shown only in analyst mode. See run.py's record_pass().
+    function mergePassStats(playerPasses) {
+      if (!playerPasses) return;
+      for (const [player, p] of Object.entries(playerPasses)) {
+        const entry = playerStats.get(player) || { team: p.team, counts: {}, total: 0, lastSeen: '0:00' };
+        entry.team = p.team;
+        entry.passes = { attempts: p.attempts, completions: p.completions };
+        playerStats.set(player, entry);
+      }
+      renderPlayerStats();
     }
 
     // Agent Activity: every real Spotter decision (confirmed or rejected),
@@ -607,13 +661,18 @@
       updatePlayerStats(a);
     }
 
-    // Player stats: tallied client-side from confirmed activity entries that
-    // name a real player -- not a separate telemetry feed (the match replay
-    // doesn't carry continuous per-player data, see the ambient-dots CSS
-    // comment above). goal/big_chance/speed_milestone/foul are the trigger
-    // kinds that carry a player; control_swing/pressing_spell are team-level.
-    const KIND_ICON = { goal: '⚽', big_chance: '🎯', speed_milestone: '⚡', yellow: '🟨', red: '🟥' };
-    const playerStats = new Map(); // player -> { team, counts: {kind: n}, lastSeen: "MM:SS" }
+    // Player stats: moment tallies from confirmed Agent Activity entries
+    // (goal/big_chance/speed_milestone/foul/pass_quality -- control_swing
+    // and pressing_spell are team-level, nothing to tally) merged with
+    // continuous per-player pass stats from mergePassStats() above. Mode
+    // controls depth, not just overlay tone: casual/fan show the simple
+    // badge tally; analyst adds real pass attempt/completion/accuracy
+    // numbers and sorts by involvement instead of "who made the news".
+    const KIND_ICON = {
+      goal: '⚽', big_chance: '🎯', speed_milestone: '⚡', yellow: '🟨', red: '🟥',
+      pass_quality: '👟',
+    };
+    const playerStats = new Map(); // player -> { team, counts, total, lastSeen, passes? }
     function toSeconds(clockStr) {
       const [m, s] = clockStr.split(':').map(Number);
       return m * 60 + s;
@@ -622,26 +681,65 @@
       if (!a.player || !a.confirmed) return;
       const key = a.kind === 'foul' ? (a.priority === 1 ? 'red' : 'yellow') : a.kind;
       if (!KIND_ICON[key]) return; // team-level kinds (control_swing, pressing_spell): nothing to tally
-      const entry = playerStats.get(a.player) || { team: a.team, counts: {}, lastSeen: a.show_at };
+      const entry = playerStats.get(a.player) || { team: a.team, counts: {}, total: 0, lastSeen: a.show_at };
       entry.team = a.team;
       entry.lastSeen = a.show_at;
       entry.counts[key] = (entry.counts[key] || 0) + 1;
+      entry.total += 1;
       playerStats.set(a.player, entry);
       renderPlayerStats();
     }
+    const PLAYER_STATS_CAP = 6;
+    let playerStatsExpanded = false;
     function renderPlayerStats() {
-      const rows = [...playerStats.entries()].sort((x, y) => toSeconds(y[1].lastSeen) - toSeconds(x[1].lastSeen));
+      const focusChoice = document.getElementById('focus').value;
+      const isAnalyst = document.getElementById('mode').value === 'analyst';
+      document.getElementById('playerStatsTitle').textContent = isAnalyst ? 'Analyst stats' : 'Player stats';
+      // Casual: most-newsworthy first (moment count, recency as tiebreak).
+      // Analyst: most-involved-on-the-ball first -- a quiet, reliable
+      // passer matters here even with zero "stories".
+      const rows = [...playerStats.entries()].sort((x, y) => isAnalyst
+        ? ((y[1].passes?.attempts || 0) - (x[1].passes?.attempts || 0))
+        : ((y[1].total - x[1].total) || (toSeconds(y[1].lastSeen) - toSeconds(x[1].lastSeen))));
       document.getElementById('playerStatsCount').textContent =
         `${rows.length} player${rows.length === 1 ? '' : 's'}`;
+      // All 20+ players at once was the single biggest source of clutter --
+      // show a handful, let the viewer ask for the rest.
+      const capped = !playerStatsExpanded && rows.length > PLAYER_STATS_CAP;
+      const shown = capped ? rows.slice(0, PLAYER_STATS_CAP) : rows;
+      const rowsHtml = shown.map(([player, e]) => {
+            const cls = `player-stat-row${player === focusChoice ? ' focused' : ''}`
+              + `${focusChoice && player !== focusChoice ? ' dimmed' : ''}`;
+            const badges = Object.entries(e.counts)
+              .map(([k, n]) => `<span title="${k}">${KIND_ICON[k]} ${n}</span>`).join('');
+            const metrics = isAnalyst ? (() => {
+              const p = e.passes || { attempts: 0, completions: 0 };
+              const acc = p.attempts ? Math.round(100 * p.completions / p.attempts) : null;
+              return `<div class="player-stat-metrics">
+                <span>${p.completions}/${p.attempts} passes</span>
+                <span>${acc != null ? acc + '% acc' : '—'}</span>
+              </div>`;
+            })() : '';
+            return `<div class="${cls}">
+              <div class="player-stat-name">${player}</div>
+              <div class="player-stat-team">${e.team}</div>
+              ${metrics}
+              <div class="player-stat-badges">${badges}</div>
+            </div>`;
+          }).join('');
+      const toggleHtml = rows.length > PLAYER_STATS_CAP
+        ? `<button class="show-all-btn" id="playerStatsToggle">${capped ? `Show all ${rows.length}` : 'Show less'}</button>`
+        : '';
       document.getElementById('playerStatsList').innerHTML = rows.length
-        ? rows.map(([player, e]) => `
-          <div class="player-stat-row">
-            <div class="player-stat-name">${player}</div>
-            <div class="player-stat-team">${e.team}</div>
-            <div class="player-stat-badges">${Object.entries(e.counts)
-              .map(([k, n]) => `<span title="${k}">${KIND_ICON[k]} ${n}</span>`).join('')}</div>
-          </div>`).join('')
+        ? rowsHtml + toggleHtml
         : '<div class="empty-note">Nobody\'s made the news yet…</div>';
+      const toggleBtn = document.getElementById('playerStatsToggle');
+      if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+          playerStatsExpanded = !playerStatsExpanded;
+          renderPlayerStats();
+        });
+      }
     }
 
     // Local dev path (file://): the local preview server from
@@ -685,6 +783,8 @@
     }
     connect();
 
+    document.getElementById('mode').addEventListener('change', renderPlayerStats);
+    document.getElementById('focus').addEventListener('change', renderPlayerStats);
     for (const id of ['mode', 'lang', 'focus']) {
       document.getElementById(id).addEventListener('change', () => lastMsg && show(lastMsg));
     }
