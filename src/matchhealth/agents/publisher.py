@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 
 from matchhealth.shared.models import Overlay
@@ -23,8 +22,11 @@ def webpubsub_publisher():
     )
 
     async def publish(base: Overlay, variants: list[Overlay]) -> None:
-        client.send_to_all(json.dumps({
-            "base": base.to_wire(), "variants": [v.to_wire() for v in variants]}),
+        # Pass a dict, not a pre-dumped string: with content_type="application/json"
+        # the SDK JSON-serializes `message` itself, so a string here gets dumped
+        # twice (the client would receive a quoted JSON string, not an object).
+        client.send_to_all(
+            {"base": base.to_wire(), "variants": [v.to_wire() for v in variants]},
             content_type="application/json")
 
     return publish
