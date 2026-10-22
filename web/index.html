@@ -503,6 +503,13 @@
       document.getElementById('headline').textContent = o.headline;
       document.getElementById('subline').textContent = o.subline || '';
 
+      // Sync the header clock to this moment's own timestamp. The clock is
+      // otherwise only advanced by periodic health ticks (every 10 events),
+      // which can race ahead of an overlay that took a little longer to
+      // process (e.g. Cosmos write latency) -- without this, the displayed
+      // time could be later than the moment actually being narrated.
+      document.getElementById('clock').textContent = msg.base.show_at;
+
       if (o.template === 'stat_compare') {
         const maxAbs = Math.max(1, ...o.stats.map(s => Math.abs(s.value ?? s.to ?? 0)));
         document.getElementById('stats').innerHTML = o.stats.map(s => compareBar(s, maxAbs)).join('');
