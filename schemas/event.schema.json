@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MatchEvent",
+  "type": "object",
+  "required": ["id", "t", "type", "team"],
+  "properties": {
+    "id": {"type": "integer"},
+    "t": {"type": "number", "description": "Seconds since kick-off"},
+    "type": {"enum": ["kickoff", "pass", "shot", "tackle", "pressure", "possession_change", "foul", "goal", "half_time", "full_time"]},
+    "team": {"type": "string"},
+    "player": {"type": ["string", "null"]},
+    "x": {"type": ["number", "null"], "minimum": 0, "maximum": 105},
+    "y": {"type": ["number", "null"], "minimum": 0, "maximum": 68},
+    "end_x": {"type": ["number", "null"]},
+    "end_y": {"type": ["number", "null"]},
+    "outcome": {"type": ["string", "null"], "description": "success | fail | on_target | off_target | blocked | won | lost"},
+    "speed_kmh": {"type": ["number", "null"]}
+  }
+}

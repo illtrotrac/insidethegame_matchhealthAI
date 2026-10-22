@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "matchhealth"
+version = "0.1.0"
+description = "Explainable football match intelligence produced by an agent crew"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.6",
+  "jsonschema>=4.21",
+  "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+azure = [
+  "openai>=1.40",
+  "azure-identity>=1.16",
+  "azure-cosmos>=4.7",
+  "azure-messaging-webpubsubservice>=1.1",
+]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.5"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+matchhealth = ["agents/prompts/*.md"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

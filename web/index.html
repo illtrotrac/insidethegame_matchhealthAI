@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Match Health overlay</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #0b1f14; color: #fff; }
+    .stage { position: relative; aspect-ratio: 16/9; max-width: 1100px; margin: 24px auto;
+             background: #14532d; border-radius: 8px; overflow: hidden; }
+    .controls { max-width: 1100px; margin: 0 auto; display: flex; gap: 12px; padding: 0 16px; }
+    .overlay { position: absolute; left: 4%; bottom: 8%; max-width: 60%; background: rgba(0,0,0,.78);
+               border-left: 4px solid #22c55e; padding: 12px 16px; transition: opacity .4s; }
+    .overlay h2 { margin: 0 0 4px; font-size: 1.3rem; }
+    .overlay p { margin: 0; opacity: .85; }
+    .stats { display: flex; gap: 16px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+    .hidden { opacity: 0; }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <label>Mode <select id="mode"><option>casual</option><option>analyst</option></select></label>
+    <label>Language <select id="lang"><option>en</option><option>es</option></select></label>
+  </div>
+  <div class="stage">
+    <div id="overlay" class="overlay hidden">
+      <h2 id="headline"></h2><p id="subline"></p><div id="stats" class="stats"></div>
+    </div>
+  </div>
+  <script>
+    // TODO: fetch a client access URL from the API (Web PubSub negotiate) and connect.
+    // Message shape: {"base": Overlay, "variants": [Overlay, ...]} — see schemas/overlay.schema.json
+    const pick = (msg) => {
+      const mode = document.getElementById('mode').value;
+      const lang = document.getElementById('lang').value;
+      return msg.variants.find(v => v.mode === mode && v.language === lang) || msg.base;
+    };
+    function show(msg) {
+      const o = pick(msg);
+      document.getElementById('headline').textContent = o.headline;
+      document.getElementById('subline').textContent = o.subline || '';
+      document.getElementById('stats').innerHTML = o.stats.map(s =>
+        `<span>${s.label}: <b>${s.value ?? `${s.from} → ${s.to}`}</b></span>`).join('');
+      const el = document.getElementById('overlay');
+      el.classList.remove('hidden');
+      setTimeout(() => el.classList.add('hidden'), o.duration_s * 1000);
+    }
+    // Demo message so the page renders without a backend:
+    show({ base: { headline: "Riverside FC have seized control", subline: null, duration_s: 8,
+      stats: [{ label: "Control score", from: 38.2, to: 66.0 }] }, variants: [] });
+  </script>
+</body>
+</html>
