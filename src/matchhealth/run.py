@@ -20,7 +20,7 @@ from matchhealth.replay.replayer import replay
 from matchhealth.shared.state import InMemoryStore
 
 
-async def main(seed: int, speed: float) -> InMemoryStore:
+async def main(seed: int, speed: float, preview: bool = False) -> InMemoryStore:
     cfg = MatchConfig(seed=seed)
     events = generate_match(cfg)
     home, away = cfg.teams
@@ -32,10 +32,28 @@ async def main(seed: int, speed: float) -> InMemoryStore:
     if not mock_enabled():
         from matchhealth.agents.llm import FoundryLLM
         llm = FoundryLLM()
-    publish = console_publish
-    if os.environ.get("WEBPUBSUB_ENDPOINT"):
+
+    preview_server = None
+    publishers = [console_publish]
+    if preview:
+        from matchhealth.agents.local_preview import LocalPreviewServer
+        preview_server = LocalPreviewServer()
+        await preview_server.start()
+        print("Open web/index.html in your browser now (file:// is fine).")
+        print("Waiting up to 120s for it to connect...")
+        if not await preview_server.wait_for_a_client():
+            print("No browser connected in time; continuing without live preview.")
+            preview_server = None
+        else:
+            print("Browser connected — starting the match.")
+            publishers.append(preview_server.publish)
+    elif os.environ.get("WEBPUBSUB_ENDPOINT"):
         from matchhealth.agents.publisher import webpubsub_publisher
-        publish = webpubsub_publisher()
+        publishers.append(webpubsub_publisher())
+
+    async def publish(base, variants) -> None:
+        for p in publishers:
+            await p(base, variants)
 
     crew = Orchestrator(store, publish, llm)
     print(f"{home.name} vs {away.name} — {len(events)} synthetic events, mock={mock_enabled()}")
@@ -43,6 +61,8 @@ async def main(seed: int, speed: float) -> InMemoryStore:
         for trig in detector.process(ev):
             await crew.handle(trig)
     print(f"Full time. {len(store.moments())} moments produced.")
+    if preview_server:
+        await preview_server.close()
     return store
 
 
@@ -51,8 +71,10 @@ def cli() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--speed", type=float, default=0, help="1 = real time, 0 = as fast as possible")
+    p.add_argument("--preview", action="store_true",
+                    help="Serve overlays to web/index.html over a local WebSocket (no Azure)")
     args = p.parse_args()
-    asyncio.run(main(args.seed, args.speed))
+    asyncio.run(main(args.seed, args.speed, args.preview))
 
 
 if __name__ == "__main__":

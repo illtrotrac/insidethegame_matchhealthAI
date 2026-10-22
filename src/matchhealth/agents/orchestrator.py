@@ -13,7 +13,7 @@ from matchhealth.shared.state import StateStore
 
 log = logging.getLogger(__name__)
 
-ANALYST_TIMEOUT_S = 6.0
+ANALYST_TIMEOUT_S = 15.0
 
 DEFAULT_PERSONAS = [
     {"mode": "analyst", "language": "en"},

@@ -28,13 +28,13 @@
     </div>
   </div>
   <script>
-    // TODO: fetch a client access URL from the API (Web PubSub negotiate) and connect.
     // Message shape: {"base": Overlay, "variants": [Overlay, ...]} — see schemas/overlay.schema.json
     const pick = (msg) => {
       const mode = document.getElementById('mode').value;
       const lang = document.getElementById('lang').value;
       return msg.variants.find(v => v.mode === mode && v.language === lang) || msg.base;
     };
+    let hideTimer = null;
     function show(msg) {
       const o = pick(msg);
       document.getElementById('headline').textContent = o.headline;
@@ -43,11 +43,29 @@
         `<span>${s.label}: <b>${s.value ?? `${s.from} → ${s.to}`}</b></span>`).join('');
       const el = document.getElementById('overlay');
       el.classList.remove('hidden');
-      setTimeout(() => el.classList.add('hidden'), o.duration_s * 1000);
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => el.classList.add('hidden'), o.duration_s * 1000);
     }
-    // Demo message so the page renders without a backend:
-    show({ base: { headline: "Riverside FC have seized control", subline: null, duration_s: 8,
-      stats: [{ label: "Control score", from: 38.2, to: 66.0 }] }, variants: [] });
+
+    // Local dev/demo path: `python -m matchhealth.run --preview` starts a plain
+    // WebSocket server on this port and streams every overlay to it as the
+    // match replays — no Azure needed. Open this file directly in a browser.
+    // When deployed, swap this block for a Web PubSub negotiate() call.
+    const LOCAL_PREVIEW_WS = "ws://localhost:8765";
+    let lastMsg = null;
+
+    function connect() {
+      const ws = new WebSocket(LOCAL_PREVIEW_WS);
+      ws.onopen = () => console.log("connected to local preview server:", LOCAL_PREVIEW_WS);
+      ws.onmessage = (ev) => { lastMsg = JSON.parse(ev.data); show(lastMsg); };
+      ws.onerror = () => console.warn("no local preview server running yet");
+      ws.onclose = () => setTimeout(connect, 1500);
+    }
+    connect();
+
+    for (const id of ['mode', 'lang']) {
+      document.getElementById(id).addEventListener('change', () => lastMsg && show(lastMsg));
+    }
   </script>
 </body>
 </html>
