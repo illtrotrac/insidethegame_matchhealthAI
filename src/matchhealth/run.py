@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import time
 
 from dotenv import load_dotenv
 
@@ -112,14 +113,19 @@ async def main(seed: int, speed: float, preview: bool = False,
 def cli() -> None:
     load_dotenv()
     p = argparse.ArgumentParser()
-    p.add_argument("--seed", type=int, default=7)
+    p.add_argument("--seed", type=int, default=None,
+                    help="Fixed seed for a reproducible match; omit for a fresh one each run "
+                         "(e.g. the scheduled judging-period demo job)")
     p.add_argument("--speed", type=float, default=0, help="1 = real time, 0 = as fast as possible")
     p.add_argument("--preview", action="store_true",
                     help="Serve overlays to web/index.html over a local WebSocket (no Azure)")
     p.add_argument("--favourite-player", default="E. Novak",
                     help="Adds a 'fan' persona following this player; empty string disables it")
     args = p.parse_args()
-    asyncio.run(main(args.seed, args.speed, args.preview, args.favourite_player or None))
+    seed = args.seed if args.seed is not None else int(time.time()) % 1000
+    if args.seed is None:
+        print(f"No --seed given, using {seed} (changes every run, e.g. for the scheduled demo job)")
+    asyncio.run(main(seed, args.speed, args.preview, args.favourite_player or None))
 
 
 if __name__ == "__main__":

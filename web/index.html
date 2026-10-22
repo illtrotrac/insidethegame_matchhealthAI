@@ -393,8 +393,8 @@
     function randIn(min, max) { return min + Math.random() * (max - min); }
     function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
-    function wanderLoop(el, { radius, minDelay, maxDelay, minDur, maxDur }) {
-      const anchor = {
+    function wanderLoop(el, { radius, minDelay, maxDelay, minDur, maxDur, startAnchor }) {
+      const anchor = startAnchor || {
         x: randIn(PITCH_BOUNDS.xMin, PITCH_BOUNDS.xMax),
         y: randIn(PITCH_BOUNDS.yMin, PITCH_BOUNDS.yMax),
       };
@@ -418,20 +418,34 @@
       setTimeout(step, randIn(0, maxDelay) * 1000); // stagger the first move per dot
     }
 
+    // Rough kickoff shape (not a real formation feed -- just a sane starting
+    // spread) so dots don't appear scattered randomly across the pitch
+    // before their first wander move.
+    const HOME_FORMATION = [
+      { x: 12, y: 50 }, { x: 25, y: 22 }, { x: 25, y: 50 }, { x: 25, y: 78 },
+      { x: 38, y: 35 }, { x: 38, y: 65 }, { x: 46, y: 50 },
+    ];
+    const AWAY_FORMATION = [
+      { x: 88, y: 50 }, { x: 75, y: 22 }, { x: 75, y: 50 }, { x: 75, y: 78 },
+      { x: 62, y: 35 }, { x: 62, y: 65 }, { x: 54, y: 50 },
+    ];
+
     function spawnAmbientPitch() {
       const stage = document.querySelector('.stage');
-      for (let i = 0; i < 7; i++) {
+      HOME_FORMATION.forEach((pos) => {
         const d = document.createElement('div');
         d.className = 'player-dot home';
         stage.appendChild(d);
-        wanderLoop(d, { radius: 16, minDelay: 1.5, maxDelay: 4, minDur: 1.8, maxDur: 3.5 });
-      }
-      for (let i = 0; i < 7; i++) {
+        wanderLoop(d, { radius: 16, minDelay: 1.5, maxDelay: 4, minDur: 1.8, maxDur: 3.5,
+                         startAnchor: pos });
+      });
+      AWAY_FORMATION.forEach((pos) => {
         const d = document.createElement('div');
         d.className = 'player-dot away';
         stage.appendChild(d);
-        wanderLoop(d, { radius: 16, minDelay: 1.5, maxDelay: 4, minDur: 1.8, maxDur: 3.5 });
-      }
+        wanderLoop(d, { radius: 16, minDelay: 1.5, maxDelay: 4, minDur: 1.8, maxDur: 3.5,
+                         startAnchor: pos });
+      });
       const ballWrap = document.createElement('div');
       ballWrap.className = 'ball-wrap';
       ballWrap.innerHTML = `
@@ -477,7 +491,15 @@
       const o = pick(msg);
       const el = document.getElementById('overlay');
       el.dataset.template = o.template;
-      document.getElementById('tag').textContent = TAG_LABEL[o.template] || o.template;
+
+      // The real player this moment is about (always msg.base, never a
+      // persona-relabelled variant -- see the "fan"/focus logic below).
+      // Shown right in the tag line so it's unambiguous which player the
+      // floating possession ring (on the ambient ball marker, elsewhere on
+      // the pitch) corresponds to, rather than relying on spatial proximity.
+      const truePlayer = msg.base.focus_player;
+      const tagBase = TAG_LABEL[o.template] || o.template;
+      document.getElementById('tag').textContent = truePlayer ? `${tagBase} · ${truePlayer}` : tagBase;
       document.getElementById('headline').textContent = o.headline;
       document.getElementById('subline').textContent = o.subline || '';
 
@@ -488,7 +510,6 @@
         document.getElementById('stats').innerHTML = o.stats.map(statChip).join('');
       }
 
-      const truePlayer = msg.base.focus_player;
       if (truePlayer) registerPlayer(truePlayer);
       const focusChoice = document.getElementById('focus').value;
       el.classList.toggle('focused', !!focusChoice && truePlayer === focusChoice);
