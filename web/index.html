@@ -94,11 +94,12 @@
     }
     .health.stale { opacity: .45; }
 
-    /* ---- layout: player stats | stage | agent activity on wide screens --- */
+    /* ---- layout: pitch | sidebar (activity + player stats stacked) ------ */
     .main-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
-    @media (min-width: 1050px) {
-      .main-grid { grid-template-columns: .85fr 1.6fr 1fr; align-items: start; }
+    @media (min-width: 860px) {
+      .main-grid { grid-template-columns: 1.7fr 1fr; align-items: start; }
     }
+    .sidebar { display: flex; flex-direction: column; gap: 14px; }
 
     /* ---- shared panel chrome: player stats + agent activity ------------- */
     .activity-panel, .player-stats-panel {
@@ -332,11 +333,6 @@
     </div>
 
     <div class="main-grid">
-    <div class="player-stats-panel">
-      <div class="activity-title">Player stats <span id="playerStatsCount">0 players</span></div>
-      <div id="playerStatsList"><div class="empty-note">Nobody's made the news yet…</div></div>
-    </div>
-
     <div class="stage">
       <svg class="pitch-lines" viewBox="0 0 1600 900" preserveAspectRatio="none" aria-hidden="true">
         <rect x="40" y="40" width="1520" height="820"></rect>
@@ -370,9 +366,15 @@
       </div>
     </div>
 
-    <div class="activity-panel">
-      <div class="activity-title">Agent activity <span id="activityCount">0 decisions</span></div>
-      <div id="activityList"></div>
+    <div class="sidebar">
+      <div class="activity-panel">
+        <div class="activity-title">Agent activity <span id="activityCount">0 decisions</span></div>
+        <div id="activityList"></div>
+      </div>
+      <div class="player-stats-panel">
+        <div class="activity-title">Player stats <span id="playerStatsCount">0 players</span></div>
+        <div id="playerStatsList"><div class="empty-note">Nobody's made the news yet…</div></div>
+      </div>
     </div>
     </div>
   </div>

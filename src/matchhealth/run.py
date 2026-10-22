@@ -21,7 +21,7 @@ from matchhealth.replay.replayer import replay
 from matchhealth.shared.models import clock
 from matchhealth.shared.state import InMemoryStore, StateStore
 
-HEALTH_TICK_EVERY = 10  # publish a live control/chaos snapshot every N events
+HEALTH_TICK_EVERY = 5  # publish a live control/chaos snapshot every N events
 
 
 async def main(seed: int, speed: float, preview: bool = False,
@@ -85,25 +85,31 @@ async def main(seed: int, speed: float, preview: bool = False,
 
     score = {home.name: 0, away.name: 0}
 
-    async def send_health(ev) -> None:
+    async def send_health(t: float) -> None:
         snap = detector.engine.snapshot()
         await raw_send({
-            "show_at": clock(ev.t),
-            "teams": {t: snap[t].model_dump() for t in (home.name, away.name)},
+            "show_at": clock(t),
+            "teams": {t2: snap[t2].model_dump() for t2 in (home.name, away.name)},
             "score": dict(score),
         })
+
+    if raw_send:
+        # Team names/clock otherwise sit blank until the first periodic tick
+        # (every HEALTH_TICK_EVERY events) -- send one immediately at kickoff
+        # so a freshly-connected viewer isn't staring at placeholders.
+        await send_health(0.0)
 
     tick = 0
     async for ev in replay(events, speed=speed):
         if ev.type == "goal":
             score[ev.team] += 1
             if raw_send:
-                await send_health(ev)  # don't wait for the next periodic tick on a goal
+                await send_health(ev.t)  # don't wait for the next periodic tick on a goal
         for trig in detector.process(ev):
             await crew.handle(trig)
         tick += 1
         if raw_send and tick % HEALTH_TICK_EVERY == 0:
-            await send_health(ev)
+            await send_health(ev.t)
     print(f"Full time. {len(store.moments())} moments produced. Final score: {score}")
     if preview_server:
         await preview_server.close()
