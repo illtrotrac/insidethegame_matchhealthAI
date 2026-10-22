@@ -37,6 +37,34 @@ Match Health AI: entry for the Microsoft x Premier League "Inside the Game" hack
     start --name matchhealth-replay --resource-group matchhealth-rg`; watch logs with
     `az containerapp job logs show --name matchhealth-replay --resource-group matchhealth-rg
     --container matchhealth-replay --execution <name>`.
+  - `matchhealth-demo` (same image, MATCHHEALTH_MOCK_LLM=1, **Schedule** trigger, cron
+    `0 */2 * * *` — every 2 hours) — live, started running 22 Oct. Exists so the public site isn't
+    showing an idle page if a judge visits between manually-triggered real-mode runs during the
+    Oct 27 - Nov 10 judging period (15 days; see official rules -- judging doesn't end at
+    submission).
+    `--seed` and `--speed` are both omitted (random seed, real-time `--speed 1` from the image's
+    default CMD), so every execution is a different ~90-minute match written to its own
+    `seed-<n>` Cosmos document. Estimated cost for running the full judging window: **~$5-15**
+    (Container Apps compute only -- mock mode means $0 LLM cost; Cosmos/Web PubSub/Static Web
+    App/negotiate all stay in free tiers at this traffic level). Estimate, not a live quote --
+    there's a $20 subscription budget alert as a backstop.
+    - **Turn off:** `az containerapp job delete --name matchhealth-demo --resource-group
+      matchhealth-rg --yes`
+    - **Turn back on:**
+      ```
+      az containerapp job create --name matchhealth-demo --resource-group matchhealth-rg \
+        --environment matchhealth-env --image ghcr.io/illtrotrac/matchhealthai:latest \
+        --trigger-type Schedule --cron-expression "0 */2 * * *" --replica-timeout 6000 \
+        --replica-retry-limit 1 --parallelism 1 --cpu 0.5 --memory 1Gi --mi-system-assigned \
+        --env-vars MATCHHEALTH_MOCK_LLM=1 \
+        COSMOS_ENDPOINT=https://matchhealth-cosmos.documents.azure.com:443/ \
+        COSMOS_DATABASE=matchhealth COSMOS_CONTAINER=moments \
+        WEBPUBSUB_ENDPOINT=https://matchhealth-pubsub.webpubsub.azure.com WEBPUBSUB_HUB=overlays
+      ```
+      then re-grant its new identity (gets a new principal ID each time the job is recreated) the
+      Cosmos SQL role `00000000-0000-0000-0000-000000000002` via `az cosmosdb sql role assignment
+      create` and the `Web PubSub Service Owner` role via `az role assignment create` -- see git
+      history for the exact commands used the first time.
 - **Static Web App** `matchhealth-web`: `https://polite-wave-086f2900f.2.azurestaticapps.net` —
   live, publicly serves `web/index.html`. Deployed by `.github/workflows/swa-deploy.yml` on every
   push to `web/` (token in the `AZURE_STATIC_WEB_APPS_API_TOKEN` repo secret).
