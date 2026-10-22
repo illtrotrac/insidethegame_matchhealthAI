@@ -30,3 +30,22 @@ def webpubsub_publisher():
             content_type="application/json")
 
     return publish
+
+
+def webpubsub_health_sender():
+    """A second, independent send path for the lightweight health-tick stream
+    (control/chaos per team) -- additive, doesn't touch the Overlay contract
+    the orchestrator and tests depend on."""
+    from azure.identity import DefaultAzureCredential
+    from azure.messaging.webpubsubservice import WebPubSubServiceClient
+
+    client = WebPubSubServiceClient(
+        endpoint=os.environ["WEBPUBSUB_ENDPOINT"],
+        hub=os.environ.get("WEBPUBSUB_HUB", "overlays"),
+        credential=DefaultAzureCredential(),
+    )
+
+    async def send(payload: dict) -> None:
+        client.send_to_all(payload, content_type="application/json")
+
+    return send

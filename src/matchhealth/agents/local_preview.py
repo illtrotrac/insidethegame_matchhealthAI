@@ -41,6 +41,14 @@ class LocalPreviewServer:
         msg = json.dumps({"base": base.to_wire(), "variants": [v.to_wire() for v in variants]})
         await asyncio.gather(*(c.send(msg) for c in list(self._clients)), return_exceptions=True)
 
+    async def broadcast_raw(self, payload: dict) -> None:
+        """A second, independent stream (e.g. live health ticks) alongside the
+        Overlay path above -- the frontend tells them apart by shape."""
+        if not self._clients:
+            return
+        msg = json.dumps(payload)
+        await asyncio.gather(*(c.send(msg) for c in list(self._clients)), return_exceptions=True)
+
     async def wait_for_a_client(self, timeout_s: float = 120.0) -> bool:
         """Blocks until at least one browser connects, so early moments aren't lost."""
         elapsed = 0.0

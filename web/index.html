@@ -5,63 +5,281 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Match Health overlay</title>
   <style>
-    body { margin: 0; font-family: system-ui, sans-serif; background: #0b1f14; color: #fff; }
-    .stage { position: relative; aspect-ratio: 16/9; max-width: 1100px; margin: 24px auto;
-             background: #14532d; border-radius: 8px; overflow: hidden; }
-    .controls { max-width: 1100px; margin: 0 auto; display: flex; gap: 12px; padding: 0 16px; }
-    .overlay { position: absolute; left: 4%; bottom: 8%; max-width: 60%; background: rgba(0,0,0,.78);
-               border-left: 4px solid #22c55e; padding: 12px 16px; transition: opacity .4s; }
-    .overlay h2 { margin: 0 0 4px; font-size: 1.3rem; }
-    .overlay p { margin: 0; opacity: .85; }
-    .stats { display: flex; gap: 16px; margin-top: 8px; font-variant-numeric: tabular-nums; }
-    .hidden { opacity: 0; }
+    :root {
+      --bg: #07140d;
+      --panel: rgba(6, 14, 9, .88);
+      --panel-2: rgba(6, 14, 9, .6);
+      --ink: #f4fff7;
+      --ink-dim: rgba(244, 255, 247, .68);
+      --border: rgba(244, 255, 247, .14);
+      --control: #22c55e;   /* in-possession, calm */
+      --chaos: #f59e0b;     /* pressure, turnovers */
+      --gold: #fbbf24;      /* big moments */
+      --info: #38bdf8;      /* comparisons */
+      --muted: #94a3b8;     /* fallback / degraded */
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+      padding-block: 20px 40px;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding-inline: 16px; }
+
+    /* ---- header: teams, clock, controls -------------------------------- */
+    .matchbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; flex-wrap: wrap; margin-bottom: 14px;
+    }
+    .teams { display: flex; align-items: baseline; gap: 10px; font-weight: 600; }
+    .teams .vs { color: var(--ink-dim); font-weight: 400; font-size: .85rem; }
+    .clock {
+      font-variant-numeric: tabular-nums; color: var(--ink-dim);
+      font-size: .85rem; border: 1px solid var(--border); border-radius: 999px;
+      padding: 2px 10px;
+    }
+    .controls { display: flex; gap: 10px; }
+    .controls label {
+      display: flex; align-items: center; gap: 6px; font-size: .78rem;
+      color: var(--ink-dim); text-transform: uppercase; letter-spacing: .04em;
+    }
+    .controls select {
+      background: var(--panel-2); color: var(--ink); border: 1px solid var(--border);
+      border-radius: 6px; padding: 4px 8px; font: inherit;
+    }
+
+    /* ---- match health meter: the actual point of this project ---------- */
+    .health {
+      border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px;
+      margin-bottom: 14px; background: var(--panel-2);
+    }
+    .health-title {
+      font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
+      color: var(--ink-dim); margin-bottom: 10px;
+    }
+    .health-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .health-row:last-child { margin-bottom: 0; }
+    .health-row .name { width: 150px; font-size: .85rem; flex-shrink: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .health-bar {
+      flex: 1; height: 10px; border-radius: 999px; background: rgba(255,255,255,.08);
+      overflow: hidden; position: relative;
+    }
+    .health-fill {
+      height: 100%; border-radius: 999px; background: var(--control);
+      width: 50%; transition: width .6s ease;
+    }
+    .health-num {
+      width: 42px; text-align: right; font-variant-numeric: tabular-nums;
+      font-size: .82rem; color: var(--ink-dim); flex-shrink: 0;
+    }
+    .health.stale { opacity: .45; }
+
+    /* ---- the pitch / broadcast stage ------------------------------------ */
+    .stage {
+      position: relative; aspect-ratio: 16/9; border-radius: 10px; overflow: hidden;
+      background:
+        repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 2px, transparent 2px 64px),
+        linear-gradient(160deg, #1a5c33, #0f3a20);
+      border: 1px solid var(--border);
+    }
+
+    /* ---- overlay card: shared base, then per-template overrides -------- */
+    .overlay {
+      position: absolute; background: var(--panel); border-radius: 6px;
+      padding: 12px 16px; transition: opacity .35s, transform .35s;
+      opacity: 0; pointer-events: none;
+      left: 4%; bottom: 7%; max-width: 58%;
+      border-left: 4px solid var(--control);
+    }
+    .overlay.visible { opacity: 1; }
+    .overlay .tag {
+      font-size: .66rem; text-transform: uppercase; letter-spacing: .08em;
+      color: var(--ink-dim); margin-bottom: 2px; display: flex; gap: 6px; align-items: center;
+    }
+    .overlay h2 { margin: 0 0 3px; font-size: 1.22rem; line-height: 1.2; text-wrap: balance; }
+    .overlay p.sub { margin: 0; color: var(--ink-dim); font-size: .88rem; }
+    .stats { display: flex; gap: 14px; margin-top: 8px; flex-wrap: wrap; }
+    .stat-chip {
+      font-variant-numeric: tabular-nums; font-size: .82rem;
+      background: rgba(255,255,255,.06); border-radius: 5px; padding: 3px 8px;
+    }
+    .stat-chip b { color: var(--ink); }
+    .stat-arrow { font-weight: 700; }
+    .stat-arrow.up { color: var(--control); }
+    .stat-arrow.down { color: var(--chaos); }
+
+    /* player_tag: compact name badge, top-right, no subline emphasis */
+    .overlay[data-template="player_tag"] {
+      left: auto; right: 4%; bottom: auto; top: 6%; max-width: 46%;
+      border-left: none; border-right: 4px solid var(--ink);
+      text-align: right;
+    }
+    .overlay[data-template="player_tag"] .stats { justify-content: flex-end; }
+
+    /* stat_compare: comparison bars instead of plain chips */
+    .overlay[data-template="stat_compare"] { border-left-color: var(--info); max-width: 64%; }
+    .overlay[data-template="stat_compare"] .stats { flex-direction: column; gap: 6px; width: 100%; }
+    .compare-bar { display: flex; align-items: center; gap: 8px; font-size: .8rem; }
+    .compare-bar .label { width: 120px; color: var(--ink-dim); flex-shrink: 0; }
+    .compare-track { flex: 1; height: 7px; background: rgba(255,255,255,.08); border-radius: 999px; overflow: hidden; }
+    .compare-fill { height: 100%; background: var(--info); border-radius: 999px; }
+
+    /* momentum_chart: compact, centered, arrow-forward */
+    .overlay[data-template="momentum_chart"] {
+      left: 50%; bottom: 7%; transform: translateX(-50%); max-width: 44%; text-align: center;
+      border-left: none; border-top: 3px solid var(--control);
+    }
+    .overlay[data-template="momentum_chart"] .stats { justify-content: center; }
+
+    /* big_chance: bigger, bolder, gold -- priority-1 moments earn the weight */
+    .overlay[data-template="big_chance"] {
+      border-left-color: var(--gold); max-width: 66%; padding: 16px 20px;
+      box-shadow: 0 0 0 1px rgba(251,191,36,.25), 0 8px 24px rgba(0,0,0,.4);
+    }
+    .overlay[data-template="big_chance"] h2 { font-size: 1.5rem; }
+    .overlay[data-template="big_chance"] .stat-chip { background: rgba(251,191,36,.12); }
+
+    /* stats_only_fallback: muted, honestly labelled -- recovery, not hidden */
+    .overlay[data-template="stats_only_fallback"] {
+      border-left-color: var(--muted); opacity: .92;
+    }
+    .overlay[data-template="stats_only_fallback"].visible { opacity: .92; }
+    .overlay[data-template="stats_only_fallback"] .tag { color: var(--muted); }
+
+    @media (max-width: 640px) {
+      .overlay { max-width: 90% !important; left: 3% !important; right: auto !important; }
+      .health-row .name { width: 110px; }
+    }
   </style>
 </head>
 <body>
-  <div class="controls">
-    <label>Mode <select id="mode"><option>casual</option><option>analyst</option></select></label>
-    <label>Language <select id="lang"><option>en</option><option>es</option></select></label>
-  </div>
-  <div class="stage">
-    <div id="overlay" class="overlay hidden">
-      <h2 id="headline"></h2><p id="subline"></p><div id="stats" class="stats"></div>
+  <div class="wrap">
+    <div class="matchbar">
+      <div class="teams">
+        <span id="teamA">—</span><span class="vs">vs</span><span id="teamB">—</span>
+        <span class="clock" id="clock">00:00</span>
+      </div>
+      <div class="controls">
+        <label>Mode <select id="mode"><option>casual</option><option>analyst</option></select></label>
+        <label>Language <select id="lang"><option>en</option><option>es</option></select></label>
+      </div>
+    </div>
+
+    <div class="health stale" id="health">
+      <div class="health-title">Match health · control</div>
+      <div class="health-row">
+        <span class="name" id="healthNameA">—</span>
+        <div class="health-bar"><div class="health-fill" id="healthFillA"></div></div>
+        <span class="health-num" id="healthNumA">—</span>
+      </div>
+      <div class="health-row">
+        <span class="name" id="healthNameB">—</span>
+        <div class="health-bar"><div class="health-fill" id="healthFillB"></div></div>
+        <span class="health-num" id="healthNumB">—</span>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div id="overlay" class="overlay">
+        <div class="tag" id="tag"></div>
+        <h2 id="headline"></h2>
+        <p class="sub" id="subline"></p>
+        <div id="stats" class="stats"></div>
+      </div>
     </div>
   </div>
+
   <script>
-    // Message shape: {"base": Overlay, "variants": [Overlay, ...]} — see schemas/overlay.schema.json
+    // Two message shapes arrive on the same socket:
+    //  - {"base": Overlay, "variants": [...]} -- a moment to show, see schemas/overlay.schema.json
+    //  - {"show_at": "MM:SS", "teams": {name: HealthSnapshot}} -- a live health tick
+    const TAG_LABEL = {
+      lower_third_stat: 'Insight', player_tag: 'Player', stat_compare: 'Compare',
+      momentum_chart: 'Momentum', big_chance: 'Big chance', stats_only_fallback: 'Auto-recovery · stats only',
+    };
+
     const pick = (msg) => {
       const mode = document.getElementById('mode').value;
       const lang = document.getElementById('lang').value;
       return msg.variants.find(v => v.mode === mode && v.language === lang) || msg.base;
     };
+
+    function statChip(s) {
+      if (s.from != null && s.to != null) {
+        const up = s.to >= s.from;
+        return `<span class="stat-chip">${s.label} <span class="stat-arrow ${up ? 'up' : 'down'}">${up ? '▲' : '▼'}</span> <b>${s.from} → ${s.to}</b></span>`;
+      }
+      return `<span class="stat-chip">${s.label}: <b>${s.value ?? '—'}</b></span>`;
+    }
+
+    function compareBar(s, maxAbs) {
+      const val = s.value ?? s.to ?? 0;
+      const pct = maxAbs ? Math.min(100, Math.abs(val) / maxAbs * 100) : 0;
+      return `<div class="compare-bar"><span class="label">${s.label}</span>
+        <div class="compare-track"><div class="compare-fill" style="width:${pct}%"></div></div>
+        <b>${val}</b></div>`;
+    }
+
     let hideTimer = null;
     function show(msg) {
       const o = pick(msg);
+      const el = document.getElementById('overlay');
+      el.dataset.template = o.template;
+      document.getElementById('tag').textContent = TAG_LABEL[o.template] || o.template;
       document.getElementById('headline').textContent = o.headline;
       document.getElementById('subline').textContent = o.subline || '';
-      document.getElementById('stats').innerHTML = o.stats.map(s =>
-        `<span>${s.label}: <b>${s.value ?? `${s.from} → ${s.to}`}</b></span>`).join('');
-      const el = document.getElementById('overlay');
-      el.classList.remove('hidden');
+
+      if (o.template === 'stat_compare') {
+        const maxAbs = Math.max(1, ...o.stats.map(s => Math.abs(s.value ?? s.to ?? 0)));
+        document.getElementById('stats').innerHTML = o.stats.map(s => compareBar(s, maxAbs)).join('');
+      } else {
+        document.getElementById('stats').innerHTML = o.stats.map(statChip).join('');
+      }
+
+      el.classList.add('visible');
       clearTimeout(hideTimer);
-      hideTimer = setTimeout(() => el.classList.add('hidden'), o.duration_s * 1000);
+      hideTimer = setTimeout(() => el.classList.remove('visible'), o.duration_s * 1000);
     }
 
-    // Two ways to receive overlays, picked automatically:
-    //  - opened as a local file (file://): connect to the local preview
-    //    server from `python -m matchhealth.run --preview` -- no Azure needed.
-    //  - served over http(s) (e.g. from Static Web Apps): negotiate a short-
-    //    lived Web PubSub client token from the deployed negotiate service,
-    //    then connect directly to Web PubSub.
+    let teamNames = null;
+    function updateHealth(msg) {
+      const names = Object.keys(msg.teams);
+      if (!teamNames) {
+        teamNames = names;
+        document.getElementById('teamA').textContent = names[0];
+        document.getElementById('teamB').textContent = names[1];
+        document.getElementById('healthNameA').textContent = names[0];
+        document.getElementById('healthNameB').textContent = names[1];
+      }
+      document.getElementById('clock').textContent = msg.show_at;
+      document.getElementById('health').classList.remove('stale');
+      const [a, b] = teamNames.map(n => msg.teams[n]);
+      document.getElementById('healthFillA').style.width = `${a.control}%`;
+      document.getElementById('healthNumA').textContent = a.control.toFixed(0);
+      document.getElementById('healthFillB').style.width = `${b.control}%`;
+      document.getElementById('healthNumB').textContent = b.control.toFixed(0);
+    }
+
+    // Local dev path (file://): the local preview server from
+    // `python -m matchhealth.run --preview`, no Azure needed.
+    // Deployed path (http/https): negotiate a short-lived Web PubSub client
+    // token from the deployed negotiate service, then connect directly.
     const LOCAL_PREVIEW_WS = "ws://localhost:8765";
     const NEGOTIATE_URL =
       "https://matchhealth-negotiate.redmushroom-42fc2d2c.eastus2.azurecontainerapps.io/negotiate";
     let lastMsg = null;
 
+    function onMessage(raw) {
+      const msg = JSON.parse(raw);
+      if (msg.teams) { updateHealth(msg); return; }
+      if (msg.base) { lastMsg = msg; show(msg); }
+    }
+
     function openSocket(url) {
       const ws = new WebSocket(url);
       ws.onopen = () => console.log("connected:", url);
-      ws.onmessage = (ev) => { lastMsg = JSON.parse(ev.data); show(lastMsg); };
+      ws.onmessage = (ev) => onMessage(ev.data);
       ws.onerror = () => console.warn("socket error, will retry:", url);
       ws.onclose = () => setTimeout(connect, 1500);
     }

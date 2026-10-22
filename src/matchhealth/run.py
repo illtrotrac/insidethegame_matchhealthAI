@@ -17,7 +17,10 @@ from matchhealth.agents.publisher import console_publish
 from matchhealth.engine.thresholds import ThresholdDetector
 from matchhealth.replay.generator import MatchConfig, generate_match
 from matchhealth.replay.replayer import replay
+from matchhealth.shared.models import clock
 from matchhealth.shared.state import InMemoryStore, StateStore
+
+HEALTH_TICK_EVERY = 10  # publish a live control/chaos snapshot every N events
 
 
 async def main(seed: int, speed: float, preview: bool = False) -> StateStore:
@@ -42,6 +45,7 @@ async def main(seed: int, speed: float, preview: bool = False) -> StateStore:
 
     preview_server = None
     publishers = [console_publish]
+    health_send = None
     if preview:
         from matchhealth.agents.local_preview import LocalPreviewServer
         preview_server = LocalPreviewServer()
@@ -54,9 +58,11 @@ async def main(seed: int, speed: float, preview: bool = False) -> StateStore:
         else:
             print("Browser connected — starting the match.")
             publishers.append(preview_server.publish)
+            health_send = preview_server.broadcast_raw
     elif os.environ.get("WEBPUBSUB_ENDPOINT"):
-        from matchhealth.agents.publisher import webpubsub_publisher
+        from matchhealth.agents.publisher import webpubsub_health_sender, webpubsub_publisher
         publishers.append(webpubsub_publisher())
+        health_send = webpubsub_health_sender()
 
     async def publish(base, variants) -> None:
         for p in publishers:
@@ -64,9 +70,17 @@ async def main(seed: int, speed: float, preview: bool = False) -> StateStore:
 
     crew = Orchestrator(store, publish, llm)
     print(f"{home.name} vs {away.name} — {len(events)} synthetic events, mock={mock_enabled()}")
+    tick = 0
     async for ev in replay(events, speed=speed):
         for trig in detector.process(ev):
             await crew.handle(trig)
+        tick += 1
+        if health_send and tick % HEALTH_TICK_EVERY == 0:
+            snap = detector.engine.snapshot()
+            await health_send({
+                "show_at": clock(ev.t),
+                "teams": {t: snap[t].model_dump() for t in (home.name, away.name)},
+            })
     print(f"Full time. {len(store.moments())} moments produced.")
     if preview_server:
         await preview_server.close()
