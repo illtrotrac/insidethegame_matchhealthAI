@@ -47,19 +47,39 @@
       hideTimer = setTimeout(() => el.classList.add('hidden'), o.duration_s * 1000);
     }
 
-    // Local dev/demo path: `python -m matchhealth.run --preview` starts a plain
-    // WebSocket server on this port and streams every overlay to it as the
-    // match replays — no Azure needed. Open this file directly in a browser.
-    // When deployed, swap this block for a Web PubSub negotiate() call.
+    // Two ways to receive overlays, picked automatically:
+    //  - opened as a local file (file://): connect to the local preview
+    //    server from `python -m matchhealth.run --preview` -- no Azure needed.
+    //  - served over http(s) (e.g. from Static Web Apps): negotiate a short-
+    //    lived Web PubSub client token from the deployed negotiate service,
+    //    then connect directly to Web PubSub.
     const LOCAL_PREVIEW_WS = "ws://localhost:8765";
+    const NEGOTIATE_URL =
+      "https://matchhealth-negotiate.redmushroom-42fc2d2c.eastus2.azurecontainerapps.io/negotiate";
     let lastMsg = null;
 
-    function connect() {
-      const ws = new WebSocket(LOCAL_PREVIEW_WS);
-      ws.onopen = () => console.log("connected to local preview server:", LOCAL_PREVIEW_WS);
+    function openSocket(url) {
+      const ws = new WebSocket(url);
+      ws.onopen = () => console.log("connected:", url);
       ws.onmessage = (ev) => { lastMsg = JSON.parse(ev.data); show(lastMsg); };
-      ws.onerror = () => console.warn("no local preview server running yet");
+      ws.onerror = () => console.warn("socket error, will retry:", url);
       ws.onclose = () => setTimeout(connect, 1500);
+    }
+
+    async function connect() {
+      if (location.protocol !== "file:") {
+        try {
+          const res = await fetch(NEGOTIATE_URL);
+          const { url } = await res.json();
+          openSocket(url);
+          return;
+        } catch (e) {
+          console.warn("negotiate failed, retrying in 1.5s:", e);
+          setTimeout(connect, 1500);
+          return;
+        }
+      }
+      openSocket(LOCAL_PREVIEW_WS);
     }
     connect();
 
