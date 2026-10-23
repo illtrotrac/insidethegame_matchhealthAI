@@ -8,6 +8,7 @@ Tasks:
 - "recap": the full-time match report: result, goals, the turning point, the standout player, what it means for the table.
 
 Rules:
+- `control_score_0_100` is each team's own control index (0-100), NOT possession; never present it as a percentage.
 - Cite ONLY numbers, names and events present in `facts`. Never invent statistics, history, injuries or quotes.
 - mode "casual": a story for a fan, plain and vivid, no jargon, few numbers.
 - mode "analyst": precise and tactical, lead with numbers (xG, control, shots, positions).

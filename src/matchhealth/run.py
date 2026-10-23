@@ -42,9 +42,10 @@ async def main(seed: int, speed: float, preview: bool = False,
 
     if os.environ.get("COSMOS_ENDPOINT"):
         from matchhealth.shared.state import CosmosStore
-        match_id = f"seed-{seed}"  # stable per seed: reruns overwrite rather than pile up
-        if home_club:  # a chosen fixture is a different match from the seed's own
-            match_id += "-" + f"{home.name}-v-{away.name}".lower().replace(" ", "-")
+        # One partition per run: reusing a seed's partition let a rerun's
+        # Spotter and Narrator read the previous run's moments as this match's.
+        slug = f"{home.name}-v-{away.name}".lower().replace(" ", "-")
+        match_id = f"seed-{seed}-{slug}-{int(time.time())}"
         store = CosmosStore(match_id)
         print(f"Using Cosmos DB shared state (match_id={match_id})")
     else:

@@ -130,10 +130,11 @@ class Narrator:
             key=lambda m: m["t"])
         facts = {
             "clock": clock(t), "home": home, "away": away,
-            "score": [live["score"][home], live["score"][away]],
-            "control": [live["control"][home], live["control"][away]],
-            "xg": [live["ratings"][home]["xg"], live["ratings"][away]["xg"]],
-            "shots": [live["ratings"][home]["shots"], live["ratings"][away]["shots"]],
+            # Keyed by team, not [home, away] pairs: the model swapped pair order.
+            "score": {n: live["score"][n] for n in (home, away)},
+            "control_score_0_100": {n: live["control"][n] for n in (home, away)},
+            "xg": {n: live["ratings"][n]["xg"] for n in (home, away)},
+            "shots": {n: live["ratings"][n]["shots"] for n in (home, away)},
             "moments": [{k: v for k, v in m.items() if k != "t"}
                         for m in (moments if full else moments[-10:])],
             "storylines": next((i["variants"].get("casual-en", {}).get("lines")
@@ -150,7 +151,7 @@ class Narrator:
                 {"player": weights.most_common(1)[0][0][0], "team": weights.most_common(1)[0][0][1]}
                 if weights else None)
             facts["table_position_after"] = _positions_after(
-                self.season["table"], home, away, *facts["score"])
+                self.season["table"], home, away, *_pair(facts, "score"))
         return facts
 
 
@@ -166,6 +167,10 @@ def _validated(data: dict, keys: list[str]) -> dict:
                 and all(isinstance(line, str) for line in v["lines"])):
             out[k] = {"title": v["title"][:80], "lines": [line[:240] for line in v["lines"][:4]]}
     return out
+
+
+def _pair(f: dict, key: str) -> tuple:
+    return f[key][f["home"]], f[key][f["away"]]
 
 
 def _trailing(form: list[str], allowed: str) -> int:
@@ -274,7 +279,7 @@ def _pre_match_text(f: dict, mode: str, lang: str) -> dict:
 
 
 def _score_line(f: dict, es: bool) -> str:
-    (H, A), (h, a) = (f["home"], f["away"]), f["score"]
+    (H, A), (h, a) = (f["home"], f["away"]), _pair(f, "score")
     if h == a:
         return f"Empate a {h}." if es else f"Still level at {h}-{a}."
     lead, (x, y) = (H, (h, a)) if h > a else (A, (a, h))
@@ -283,7 +288,7 @@ def _score_line(f: dict, es: bool) -> str:
 
 def _checkpoint_text(f: dict, mode: str, lang: str) -> dict:
     es, analyst = lang == "es", mode == "analyst"
-    H, A, (h, a) = f["home"], f["away"], f["score"]
+    H, A, (h, a) = f["home"], f["away"], _pair(f, "score")
     kinds = KIND_TEXT["es" if es else "en"]
     lines = [_score_line(f, es)]
     goals = [m for m in f["moments"] if m["kind"] == "goal"]
@@ -299,7 +304,7 @@ def _checkpoint_text(f: dict, mode: str, lang: str) -> dict:
     else:
         lines.append("Inicio tranquilo: aún sin jugadas clave." if es
                      else "A quiet start: no key moments yet.")
-    (hc, ac), (hx, ax), (hs, as_) = f["control"], f["xg"], f["shots"]
+    (hc, ac), (hx, ax), (hs, as_) = (_pair(f, k) for k in ("control_score_0_100", "xg", "shots"))
     if analyst:
         lines.append(f"Control {hc:.0f}–{ac:.0f}, xG {hx:.2f}–{ax:.2f}, "
                      f"{'tiros' if es else 'shots'} {hs}–{as_}.")
@@ -315,8 +320,8 @@ def _checkpoint_text(f: dict, mode: str, lang: str) -> dict:
 
 def _recap_text(f: dict, mode: str, lang: str) -> dict:
     es, analyst = lang == "es", mode == "analyst"
-    H, A, (h, a) = f["home"], f["away"], f["score"]
-    (hc, ac), (hx, ax), (hs, as_) = f["control"], f["xg"], f["shots"]
+    H, A, (h, a) = f["home"], f["away"], _pair(f, "score")
+    (hc, ac), (hx, ax), (hs, as_) = (_pair(f, k) for k in ("control_score_0_100", "xg", "shots"))
     if analyst:
         lines = [f"{H} {h}-{a} {A}, xG {hx:.2f}–{ax:.2f}."]
     elif h > a:
