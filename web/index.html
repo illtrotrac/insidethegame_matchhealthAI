@@ -3,1042 +3,522 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Match Health overlay</title>
+  <title>Match Health</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet">
   <style>
+    /* Floodlit pitch at night. Team colours are data (home amber, away sky);
+       red only for cards and failures. One family (Archivo): its condensed
+       cut for scores and headlines, normal width for reading, tabular digits.
+       Reading text is never below 15px or under 4.5:1 contrast. */
     :root {
-      /* Floodlit pitch at night: turf-ink base, line-paint chalk for text.
-         The two team colours are data (home amber floodlight, away sky);
-         red is reserved for cards and failures. One family (Archivo) --
-         its width axis is the display device: ultra-condensed heavy for
-         scores and headlines, normal width for reading, tabular digits. */
-      --bg: #0d1d1a;
-      --panel: #152b27;
-      --panel-2: #1b3530;
-      --panel-solid: #152b27;
-      --ink: #eceFe4;
-      --ink-dim: rgba(236, 239, 228, .62);
-      --border: rgba(236, 239, 228, .12);
-      --control: #f2a541;   /* home team */
-      --away: #7cc6f2;      /* away team */
-      --chaos: #e5484d;     /* cards, losses, failures */
-      --gold: #f2a541;      /* big moments: same floodlight as home, by design */
-      --info: #7cc6f2;
-      --muted: #8fa39c;     /* fallback / degraded / draw */
-      --focus: #c9f27c;     /* "you selected this" */
+      --bg: #0b1916;
+      --band: #0e211d;
+      --panel: #11231f;
+      --panel-2: #172e29;
+      --ink: #eef1e8;
+      --ink-dim: rgba(238, 241, 232, .74);
+      --line: rgba(238, 241, 232, .09);
+      --home: #f2a541;
+      --away: #7cc6f2;
+      --gold: #f2a541;
+      --red: #e5484d;
       --win: #6fcf97;
-      --display: 'Archivo', 'Arial Narrow', sans-serif;
-      --mono: 'Archivo', system-ui, sans-serif;  /* numbers use tabular figures, not monospace */
-      --sans: 'Archivo', system-ui, sans-serif;
+      --muted: #8fa39c;
+      --focus: #c9f27c;
+      --font: 'Archivo', system-ui, sans-serif;
     }
     * { box-sizing: border-box; }
-    body {
-      margin: 0; color: var(--ink); font-family: var(--sans);
-      background: var(--bg);
-      padding-block: 20px 40px;
-    }
-    .wrap { max-width: 1400px; margin: 0 auto; padding-inline: 16px; }
-
-    /* Numeric/data values throughout the dashboard read as monospace --
-       Fira Code gives the "broadcast telemetry" precision goalline.ai-style
-       dashboards have, and pairs tabular-nums with real fixed-width digits. */
-    .clock, .teams .score, .health-num, .health-sub, .wdl-labels,
-    .rating-bar-row b, .rating-stat b, .player-stat-metrics, .stat-chip,
-    .activity-body .meta, .shot-map-legend, .playerStatsCount, #playerStatsCount,
-    #activityCount {
-      font-family: var(--mono);
-    }
-
-    /* ---- header: teams, clock, controls -------------------------------- */
-    .matchbar {
-      display: flex; align-items: center; justify-content: space-between;
-      gap: 16px; flex-wrap: wrap; margin-bottom: 14px;
-    }
-    .teams {
-      display: flex; align-items: baseline; gap: 10px;
-      font-family: var(--display); font-weight: 700; font-size: 1.3rem;
-      letter-spacing: .01em; 
-    }
-    .teams .score {
-      font-variant-numeric: tabular-nums; color: var(--gold); font-size: 1.5rem;
-      min-width: 2.4em; text-align: center;
-    }
-    .clock {
-      font-variant-numeric: tabular-nums; color: var(--ink-dim);
-      font-size: .85rem; border: 1px solid var(--border); border-radius: 999px;
-      padding: 3px 12px; background: rgba(255,255,255,.03);
-    }
-    .controls { display: flex; gap: 10px; flex-wrap: wrap; }
-    .controls label {
-      display: flex; align-items: center; gap: 6px; font-size: .72rem;
-      color: var(--ink-dim);   font-weight: 600;
-    }
-    .controls select {
-      background: var(--panel-solid); color: var(--ink); border: 1px solid var(--border);
-      border-radius: 8px; padding: 7px 12px; font: inherit; font-size: .88rem; cursor: pointer;
-      transition: border-color .15s, background .15s;
-    }
-    .controls select:hover { border-color: var(--control); background: #182036; }
-    .controls select:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-    /* Native <select> popups ignore most CSS, but Chromium does respect
-       background/color on <option> -- without this the options list falls
-       back to a white popup with our light ink colors on it, unreadable. */
-    .controls select option {
-      background: var(--panel-solid); color: var(--ink);
-    }
-    .team-checks {
-      display: flex; align-items: center; gap: 8px; background: var(--panel-solid);
-      border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px;
-    }
-    .team-checks-label {
-      font-size: .72rem; color: var(--ink-dim); 
-       font-weight: 600;
-    }
-    .team-check {
-      display: flex; align-items: center; gap: 5px; font-size: .85rem;
-      color: var(--ink); cursor: pointer;
-    }
-    .team-check input { width: 15px; height: 15px; cursor: pointer; accent-color: var(--control); }
-
-    /* ---- match health meter: the actual point of this project ---------- */
-    .health {
-      border: 1px solid var(--border); border-radius: 14px; padding: 14px 18px;
-      margin-bottom: 14px; background: var(--panel);
-    }
-    .health-title {
-      display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
-      font-size: .72rem; font-weight: 600;  
-      color: var(--ink-dim); margin-bottom: 10px; position: relative; padding-left: 12px;
-    }
-    .health-title::before, .activity-title::before {
-      content: ''; position: absolute; left: 0; top: 1px; bottom: 1px; width: 3px;
-      border-radius: 999px; background: var(--control);
-    }
-    .health-note {
-      text-transform: none; letter-spacing: 0; font-style: italic; font-size: .72rem;
-      color: rgba(244, 255, 247, .4);
-    }
-    .health-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-    .health-row:last-child { margin-bottom: 0; }
-    .health-row .name { width: 150px; font-size: .85rem; flex-shrink: 0;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .health-bar-wrap { flex: 1; display: flex; flex-direction: column; gap: 4px; }
-    .health-bar {
-      height: 10px; border-radius: 999px; background: rgba(255,255,255,.08);
-      overflow: hidden; position: relative;
-    }
-    .health-fill {
-      height: 100%; border-radius: 999px; background: var(--control);
-      width: 50%; transition: width .6s ease;
-    }
-    .health-row.away .health-fill { background: var(--away); }
-    .health-sub {
-      font-size: .7rem; color: var(--ink-dim); font-variant-numeric: tabular-nums;
-    }
-    .health-num {
-      width: 42px; text-align: right; font-variant-numeric: tabular-nums;
-      font-family: var(--display); font-weight: 700; font-size: 1rem;
-      color: var(--ink); flex-shrink: 0;
-    }
-    .health.stale { opacity: .45; }
-
-    /* ---- analyst-only: win/draw/loss + attack/defense ratings ----------
-       Hidden entirely in casual mode -- this is exactly the "stats-dense"
-       depth casual explicitly doesn't want cluttering a storyline view. */
-    .health-advanced { display: none; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
-    body[data-mode="analyst"] .health-advanced { display: block; }
-    .wdl-bar {
-      display: flex; height: 14px; border-radius: 999px; overflow: hidden;
-      background: rgba(255,255,255,.08); margin-bottom: 6px;
-    }
-    .wdl-seg { height: 100%; transition: width .6s ease; }
-    .wdl-seg.home { background: var(--control); }
-    .wdl-seg.draw { background: var(--muted); }
-    .wdl-seg.away { background: var(--away); }
-    .wdl-labels {
-      display: flex; justify-content: space-between; font-size: .72rem;
-      color: var(--ink-dim); font-variant-numeric: tabular-nums; margin-bottom: 14px;
-    }
-    .ratings-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .rating-card {
-      border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
-      background: rgba(255,255,255,.03); transition: box-shadow .2s, background .2s, opacity .2s;
-    }
-    .rating-title {
-      font-size: .78rem; font-weight: 600; margin-bottom: 4px;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .rating-stat {
-      display: flex; justify-content: space-between; font-size: .76rem;
-      color: var(--ink-dim); font-variant-numeric: tabular-nums;
-    }
-    .rating-stat b { color: var(--ink); font-weight: 700; }
-    .rating-title {
-      cursor: pointer; user-select: none; border-radius: 4px;
-    }
-    .rating-title:hover, .rating-title:focus-visible { color: var(--focus); outline: none; }
-    .rating-card.filtered-in { box-shadow: inset 0 0 0 1px var(--focus); background: rgba(196,181,253,.06); }
-    .rating-card.filtered-out { opacity: .4; }
-    .rating-bar-row { display: flex; align-items: center; gap: 6px; font-size: .74rem; color: var(--ink-dim); margin-bottom: 3px; }
-    .rating-bar-label { width: 46px; flex-shrink: 0; }
-    .rating-bar { flex: 1; height: 6px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
-    .rating-bar-fill { height: 100%; border-radius: 999px; width: 0; transition: width .6s ease; }
-    .rating-bar-fill.atk { background: var(--control); }
-    .rating-bar-fill.def { background: var(--info); }
-    .rating-bar-row b { width: 26px; text-align: right; flex-shrink: 0; color: var(--ink); font-variant-numeric: tabular-nums; }
-    .team-filter-note {
-      display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: .74rem; color: var(--ink-dim);
-      margin-top: 10px; padding: 6px 10px; border: 1px dashed var(--focus); border-radius: 6px;
-    }
-    .team-filter-note[hidden] { display: none; }  /* display:flex above would override [hidden] */
-    .team-filter-note button {
-      background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 999px; color: var(--ink-dim);
-      font: inherit; font-size: .7rem; padding: 3px 10px; cursor: pointer; margin-left: auto;
-      transition: color .15s, border-color .15s;
-    }
-    .team-filter-note button:hover { color: var(--ink); border-color: var(--focus); }
-
-    .shot-map-wrap {
-      display: none; margin-top: 14px; border: 1px solid var(--border); border-radius: 14px;
-      padding: 14px 16px; background: var(--panel);
-    }
-    body[data-mode="analyst"] .shot-map-wrap { display: block; }
-    .shot-map { width: 100%; height: auto; aspect-ratio: 68/25; border-radius: 8px; display: block; }
-    .shot-map-pitch { fill: rgba(255,255,255,.03); stroke: var(--border); stroke-width: .3; }
-    .shot-map-box { fill: none; stroke: var(--border); stroke-width: .25; }
-    .shot-map-goal { stroke: rgba(255,255,255,.45); stroke-width: .6; }
-    .shot-dot { stroke-width: .25; }
-    .shot-dot.home { fill: var(--control); stroke: var(--control); }
-    .shot-dot.away { fill: var(--away); stroke: var(--away); }
-    .shot-dot.off-target { fill-opacity: .18; }
-    .shot-dot.on-target { fill-opacity: .55; }
-    .shot-dot.goal { fill: var(--gold); stroke: var(--gold); fill-opacity: 1; }
-    .shot-map-legend {
-      display: flex; gap: 14px; margin-top: 6px; font-size: .72rem; color: var(--ink-dim);
-    }
-    .legend-dot {
-      display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px;
-    }
-    .legend-dot.home { background: var(--control); }
-    .legend-dot.away { background: var(--away); }
-    .legend-dot.goal { background: var(--gold); }
-
-    /* ---- layout: one page grid, panels placed per mode -------------------
-       The sidebar wrapper is display:contents, so every panel is a direct
-       grid item. Casual: pitch is the hero with the Story beside it, tables
-       in a row underneath. Analyst: the player stats table takes the slot
-       beside the pitch (a one-third pitch was too small for its overlays);
-       league, activity and story share the row below.
-       The panel beside the pitch is sized to the pitch's row (height 0 +
-       min-height 100%) so long content scrolls instead of stretching it. */
-    .sidebar { display: contents; }
-    .main-grid {
-      display: grid; gap: 14px; align-items: start;
-      grid-template-columns: 1fr;
-      grid-template-areas: "stage" "story" "stats" "league" "activity";
-    }
-    body[data-mode="analyst"] .main-grid {
-      grid-template-areas: "stats" "stage" "league" "activity" "story";
-    }
-    .stage { grid-area: stage; }
-    .story-panel { grid-area: story; }
-    .player-stats-panel { grid-area: stats; }
-    .league-panel { grid-area: league; }
-    .activity-panel { grid-area: activity; }
-    @media (min-width: 700px) {
-      .main-grid {
-        grid-template-columns: 1fr 1fr;
-        grid-template-areas: "stage stage" "story activity" "league stats";
-      }
-      body[data-mode="analyst"] .main-grid {
-        grid-template-areas: "stats stats" "stage league" "activity story";
-      }
-    }
-    @media (min-width: 1100px) {
-      .main-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        grid-template-areas: "stage stage story" "league stats activity";
-      }
-      body[data-mode="analyst"] .main-grid {
-        grid-template-areas: "stage stage stats" "league activity story";
-      }
-      body:not([data-mode="analyst"]) .story-panel,
-      body[data-mode="analyst"] .player-stats-panel {
-        align-self: stretch; height: 0; min-height: 100%; max-height: none;
-      }
-    }
-    body[data-mode="analyst"] .player-stats-panel { border-color: rgba(196,181,253,.35); }
-    body[data-mode="analyst"] .health-num { font-size: 1.5rem; }
-    body[data-mode="analyst"] .health-sub { font-size: .78rem; color: var(--ink); }
-
-    /* ---- shared panel chrome: player stats + agent activity ------------- */
-    .activity-panel, .player-stats-panel, .league-panel, .story-panel {
-      border: 1px solid var(--border); border-radius: 14px; background: var(--panel);
-      padding: 14px 16px; max-height: 420px; overflow-y: auto;
-    }
-    .activity-title {
-      display: flex; justify-content: space-between; align-items: baseline;
-      font-size: .72rem; font-weight: 600;  
-      color: var(--ink-dim); margin-bottom: 10px; position: relative; padding-left: 12px;
-    }
-    .activity-panel .activity-title::before { background: var(--focus); }
-    .activity-title span { font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
-
-    /* Player stats: tallied client-side from confirmed Agent Activity
-       entries (goal/big_chance/speed_milestone/foul -- whichever carry a
-       real player), not a separate data feed. */
-    .player-stat-row {
-      /* No entrance animation here (unlike .activity-item): this list's
-         innerHTML gets fully rebuilt on every health tick (every 5 events),
-         not just when a row is genuinely new -- animating on every rebuild
-         made the whole panel visibly flicker. */
-      display: flex; align-items: center; gap: 8px; padding: 7px 0;
-      border-top: 1px solid var(--border); font-size: .82rem;
-    }
-    .player-stat-row:first-child { border-top: none; }
-    .player-stat-name {
-      font-weight: 600; flex: 1; min-width: 0;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .player-stat-team {
-      color: var(--ink-dim); font-size: .72rem; flex-shrink: 0; max-width: 84px;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .player-stat-badges { display: flex; gap: 5px; flex-shrink: 0; font-size: .8rem; }
-    .player-stat-metrics {
-      display: flex; align-items: baseline; gap: 14px; flex-shrink: 0;
-      font-size: .86rem; font-variant-numeric: tabular-nums; color: var(--ink);
-      margin-right: 6px;
-    }
-    .player-stat-badges { min-width: 44px; justify-content: flex-end; }  /* keeps number columns aligned */
-    .pm-passes { min-width: 54px; text-align: right; }
-    .pm-acc { min-width: 40px; text-align: right; font-weight: 700; }
-    .player-stat-row.header {
-      font-size: .72rem; color: var(--ink-dim); padding-top: 0; border-top: none;
-    }
-    .player-stat-row.header .player-stat-name, .player-stat-row.header .player-stat-metrics,
-    .player-stat-row.header .pm-acc { font-weight: 500; color: var(--ink-dim); font-size: .72rem; }
-    .player-stat-row.focused {
-      background: rgba(196,181,253,.1); margin-inline: -8px; padding-inline: 8px;
-      border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(196,181,253,.4);
-    }
-    .player-stat-row.focused .player-stat-name { color: var(--focus); }
-    .player-stat-row.dimmed { opacity: .4; }
-    .empty-note { color: var(--ink-dim); font-size: .8rem; font-style: italic; }
-    .show-all-btn {
-      display: block; width: 100%; margin-top: 8px; padding: 7px;
-      background: rgba(255,255,255,.03); border: 1px dashed var(--border); border-radius: 8px;
-      color: var(--ink-dim); font: inherit; font-size: .74rem; cursor: pointer;
-      transition: color .15s, border-color .15s, background .15s;
-    }
-    .show-all-btn:hover { color: var(--ink); border-color: var(--control); background: rgba(34,197,94,.06); }
-    /* Story so far: the Narrator agent's storylines, checkpoints and recap
-       (agents/narrator.py). Casual mode's lead panel; analyst moves it below
-       the numbers. Newest first. */
-    .story-panel .activity-title::before { background: var(--gold); }
-    .story-item { padding: 9px 0; border-top: 1px solid var(--border); }
-    .story-item:first-child { border-top: none; padding-top: 0; }
-    .story-item .when { font-size: .7rem; color: var(--ink-dim); font-family: var(--mono); }
-    .story-item h3 {
-      margin: 2px 0 4px; font-family: var(--display); font-weight: 700; font-size: 1.05rem;
-      line-height: 1.2;
-    }
-    .story-item p { margin: 0 0 3px; font-size: .82rem; line-height: 1.45; max-width: 60ch; }
-    .story-item.recap {
-      border: 1px solid rgba(251,191,36,.35); border-radius: 10px; padding: 10px 12px;
-      background: rgba(251,191,36,.06); margin-bottom: 6px;
-    }
-
-    /* League table: season-so-far context from replay/season.py. The two
-       teams playing live are highlighted; xG columns are analyst-only. */
-    .league-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
-    .league-table th {
-      font-weight: 500; color: var(--ink-dim); font-size: .7rem; text-align: right;
-      padding: 0 4px 6px;
-    }
-    .league-table td {
-      padding: 5px 4px; border-top: 1px solid var(--border); text-align: right;
-      font-family: var(--mono); font-variant-numeric: tabular-nums;
-    }
-    .league-table .team {
-      text-align: left; font-family: var(--sans); max-width: 130px;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
-    .league-table tr.live td { background: rgba(196,181,253,.08); }
-    .league-table tr.live .team { color: var(--focus); font-weight: 600; }
-    .league-table .adv { display: none; }
-    body[data-mode="analyst"] .league-table .adv { display: table-cell; }
-    .form-chips { display: inline-flex; gap: 2px; }
-    .form-chip {
-      width: 14px; height: 14px; border-radius: 3px; font-size: .6rem; font-weight: 700;
-      display: inline-flex; align-items: center; justify-content: center; color: var(--bg);
-    }
-    .form-chip.W { background: var(--control); }
-    .form-chip.D { background: var(--muted); }
-    .form-chip.L { background: var(--chaos); }
-
-    .activity-item {
-      display: flex; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border);
-      font-size: .82rem; animation: activity-in .3s ease;
-    }
-    .activity-item:first-child { border-top: none; }
-    .activity-item.rejected { opacity: .55; }
-    .activity-badge {
-      flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: .68rem; font-weight: 700; margin-top: 1px;
-    }
-    .activity-item.confirmed .activity-badge { background: rgba(34,197,94,.18); color: var(--control); }
-    .activity-item.rejected .activity-badge { background: rgba(148,163,184,.18); color: var(--muted); }
-    .activity-body .headline { font-weight: 600; }
-    .activity-body .meta {
-      color: var(--ink-dim); font-size: .74rem; font-variant-numeric: tabular-nums;
-    }
-    .activity-body .reason { color: var(--ink-dim); font-size: .76rem; font-style: italic; }
-    @keyframes activity-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; } }
-
-    /* ---- the pitch / broadcast stage ------------------------------------ */
-    .stage {
-      position: relative; aspect-ratio: 16/9; border-radius: 10px; overflow: hidden;
-      background:
-        radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,.4) 100%),
-        repeating-linear-gradient(90deg, rgba(255,255,255,.04) 0 2px, transparent 2px 64px),
-        linear-gradient(160deg, #1d6639, #0e3a20);
-      border: 1px solid var(--border);
-    }
-    .pitch-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-    .pitch-lines path, .pitch-lines rect, .pitch-lines circle {
-      fill: none; stroke: rgba(255,255,255,.28); stroke-width: 2.5;
-    }
-    .pitch-lines rect.goal { stroke: rgba(255,255,255,.55); stroke-width: 3.5; }
-    .watermark {
-      position: absolute; right: 14px; bottom: 10px; z-index: 2;
-      font-family: var(--display); font-weight: 700; 
-      font-size: .72rem;  color: rgba(255,255,255,.4);
-    }
-    /* Ambient player dots: ATMOSPHERE, not tracked data. The synthetic match
-       only records one ball/action position per event (see generator.py) --
-       there's no real per-player feed to animate -- so this drifts a small
-       set of team-coloured markers around the pitch to make the stage read
-       as "a match is happening" rather than a flat background. Deliberately
-       small, muted and below the overlay layer so it never competes with
-       the actual data-driven graphics. */
-    .player-dot {
-      position: absolute; width: 11px; height: 11px; border-radius: 50%;
-      transform: translate(-50%, -50%);
-      box-shadow: 0 1px 3px rgba(0,0,0,.5);
-      transition: left 3.2s ease-in-out, top 3.2s ease-in-out;
-      opacity: .55; z-index: 1;
-    }
-    .player-dot.home { background: var(--control); }
-    .player-dot.away { background: var(--away); }
-
-    /* The ball marker and its possession ring/initials share ONE positioned
-       wrapper (ball-wrap), so the ring is physically attached to the ball
-       dot and moves with it -- not a separately-animated element that has
-       to chase a copied coordinate and visibly drifts apart mid-motion. */
-    .ball-wrap {
-      position: absolute; transform: translate(-50%, -50%);
-      transition: left 1.1s ease-in-out, top 1.1s ease-in-out; z-index: 1;
-    }
-    .ball-dot {
-      width: 7px; height: 7px; border-radius: 50%; background: #fff;
-      box-shadow: 0 1px 2px rgba(0,0,0,.6); opacity: .8;
-    }
-    /* Possession ring: real data (the overlay's focus_player), approximate
-       position (it rides the ambient ball marker -- there's no real per-
-       event coordinate piped to the frontend, see the comment above). */
-    .spotlight-ring {
-      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-      width: 26px; height: 26px; border-radius: 50%;
-      border: 2px solid var(--gold); box-shadow: 0 0 8px rgba(251,191,36,.5);
-      animation: spotlight-pulse 1.2s ease-in-out infinite;
-      pointer-events: none;
-    }
-    .spotlight-initials {
-      position: absolute; left: 50%; top: 100%; transform: translate(-50%, 5px);
-      font-family: var(--display); font-weight: 800; font-size: .66rem;
-      color: var(--gold); background: rgba(6,14,9,.85); padding: 1px 5px;
-      border-radius: 4px; white-space: nowrap; pointer-events: none;
-    }
-    @keyframes spotlight-pulse {
-      0%, 100% { opacity: .5; transform: translate(-50%, -50%) scale(1); }
-      50% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
-    }
-
-    /* "Your metric": one stat the viewer pinned, kept on screen all match
-       and refreshed on every health tick. Top-left so it never collides
-       with player_tag (top-right) or the lower-third overlays. */
-    .metric-pin {
-      position: absolute; left: 4%; top: 6%; z-index: 2; min-width: 150px;
-      background: var(--panel); border-radius: 10px; padding: 8px 12px;
-      border-top: 3px solid var(--focus);
-      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-      box-shadow: 0 8px 24px rgba(0,0,0,.35);
-    }
-    .metric-pin[hidden] { display: none; }
-    .metric-pin-label { font-size: .7rem; color: var(--ink-dim); margin-bottom: 4px; }
-    .metric-pin-row {
-      display: flex; align-items: center; gap: 8px; font-size: .8rem;
-      font-family: var(--mono); font-variant-numeric: tabular-nums;
-    }
-    .metric-pin-row .team { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .metric-pin-row b { color: var(--ink); }
-    .metric-pin-row i { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-    .metric-pin-row i.home { background: var(--control); }
-    .metric-pin-row i.away { background: var(--away); }
-    .metric-pin-row i.draw { background: var(--muted); }
-    .metric-pin .empty-note { font-size: .74rem; }
-
-    /* "Focus" selector: highlight whichever overlay is genuinely about the
-       chosen player (compares the real base.focus_player, not variant text). */
-    .overlay.focused {
-      border-left-color: var(--focus); box-shadow: 0 0 0 2px rgba(196,181,253,.5), 0 8px 24px rgba(0,0,0,.4);
-    }
-    .overlay.focused .tag::after { content: '· ★ following'; margin-left: 4px; color: var(--focus); }
-
-    /* ---- overlay card: shared base, then per-template overrides -------- */
-    .overlay {
-      position: absolute; background: var(--panel); border-radius: 10px;
-      padding: 12px 16px; transition: opacity .4s ease, transform .4s cubic-bezier(.2,.8,.2,1);
-      opacity: 0; pointer-events: none; transform: translateY(10px);
-      left: 4%; bottom: 7%; max-width: 58%; z-index: 2;
-      border-left: 4px solid var(--control);
-      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-      box-shadow: 0 8px 24px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
-    }
-    .overlay.visible { opacity: 1; transform: translateY(0); }
-    .overlay .tag {
-      font-size: .66rem;  
-      color: var(--ink-dim); margin-bottom: 2px; display: flex; gap: 6px; align-items: center;
-    }
-    .overlay h2 {
-      margin: 0 0 3px; font-size: 1.3rem; line-height: 1.15; text-wrap: balance;
-      font-family: var(--display); font-weight: 700; letter-spacing: .005em;
-    }
-    .overlay p.sub { margin: 0; color: var(--ink-dim); font-size: .85rem; }
-    .stats { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-    .stat-chip {
-      font-variant-numeric: tabular-nums; font-size: .76rem;
-      background: rgba(255,255,255,.06); border: 1px solid var(--border);
-      border-radius: 7px; padding: 3px 8px;
-    }
-    .stat-chip b { color: var(--ink); }
-    .stat-arrow { font-weight: 700; }
-    .stat-arrow.up { color: var(--control); }
-    .stat-arrow.down { color: var(--chaos); }
-
-    /* player_tag: compact name badge, top-right, no subline emphasis */
-    .overlay[data-template="player_tag"] {
-      left: auto; right: 4%; bottom: auto; top: 6%; max-width: 46%;
-      border-left: none; border-right: 4px solid var(--ink);
-      text-align: right;
-    }
-    .overlay[data-template="player_tag"] .stats { justify-content: flex-end; }
-
-    /* stat_compare: comparison bars instead of plain chips */
-    .overlay[data-template="stat_compare"] { border-left-color: var(--info); max-width: 64%; }
-    .overlay[data-template="stat_compare"] .stats { flex-direction: column; gap: 6px; width: 100%; }
-    .compare-bar { display: flex; align-items: center; gap: 8px; font-size: .8rem; }
-    .compare-bar .label { width: 120px; color: var(--ink-dim); flex-shrink: 0; }
-    .compare-track { flex: 1; height: 7px; background: rgba(255,255,255,.08); border-radius: 999px; overflow: hidden; }
-    .compare-fill { height: 100%; background: var(--info); border-radius: 999px; }
-
-    /* momentum_chart: compact, centered, arrow-forward */
-    .overlay[data-template="momentum_chart"] {
-      left: 50%; bottom: 7%; max-width: 44%; text-align: center;
-      border-left: none; border-top: 3px solid var(--control);
-      transform: translateX(-50%) translateY(10px);
-    }
-    .overlay[data-template="momentum_chart"].visible { transform: translateX(-50%) translateY(0); }
-    .overlay[data-template="momentum_chart"] .stats { justify-content: center; }
-
-    /* big_chance: bigger, bolder, gold -- priority-1 moments earn the weight */
-    .overlay[data-template="big_chance"] {
-      border-left-color: var(--gold); max-width: 66%; padding: 16px 20px;
-      box-shadow: 0 0 0 1px rgba(251,191,36,.25), 0 8px 24px rgba(0,0,0,.4);
-    }
-    .overlay[data-template="big_chance"] h2 { font-size: 1.4rem; }
-    .overlay[data-template="big_chance"] .stat-chip { background: rgba(251,191,36,.12); }
-
-    /* stats_only_fallback: muted, honestly labelled -- recovery, not hidden */
-    .overlay[data-template="stats_only_fallback"] {
-      border-left-color: var(--muted); opacity: .92;
-    }
-    .overlay[data-template="stats_only_fallback"].visible { opacity: .92; }
-    .overlay[data-template="stats_only_fallback"] .tag { color: var(--muted); }
-
-    @media (max-width: 640px) {
-      .overlay { max-width: 90% !important; left: 3% !important; right: auto !important; }
-      .health-row .name { width: 110px; }
-    }
-
-    /* ---- design pass: the match pulse + type ------------------------------ */
-    .next-kickoff { color: var(--ink); border-color: var(--control); }
-    .ribbon { display: block; width: 100%; height: 120px; margin: 4px 0 12px; }
-    .ribbon-axis { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
-    .ribbon-half { stroke: var(--border); stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
-    .ribbon-home { fill: color-mix(in srgb, var(--control) 55%, transparent); stroke: var(--control);
-      stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-    .ribbon-away { fill: color-mix(in srgb, var(--away) 45%, transparent); stroke: var(--away);
-      stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-    .ribbon-goal { stroke: var(--bg); stroke-width: 2; }
-    .health-bar { display: none; }
-    .health-row { margin-bottom: 4px; }
-    .health-row .name { color: var(--control); font-weight: 600; }
-    .health-row.away .name { color: var(--away); }
-
-    .teams { font-stretch: 70%; font-weight: 800; font-size: 1.6rem; gap: 14px; }
-    .teams .score { color: var(--ink); font-weight: 900; font-size: 2.2rem; font-stretch: 62%; }
-    .overlay h2, .story-item h3 { font-stretch: 72%; font-weight: 800; }
-    .health-num { font-stretch: 62%; font-weight: 900; font-size: 1.5rem; }
-    .watermark { font-stretch: 62%; font-weight: 800; }
-    body { font-variant-numeric: tabular-nums; }
-    .health-title, .activity-title, .controls label, .team-checks-label {
-      font-size: .82rem; font-weight: 600; color: var(--ink);
-    }
-    .health-title::before, .activity-title::before { display: none; }
-    .health-title, .activity-title { padding-left: 0; }
-    .health-note, .activity-title span { color: var(--ink-dim); font-weight: 400; font-style: normal; }
-    .form-chip.W { background: var(--win); }
-    .activity-panel, .player-stats-panel, .league-panel, .story-panel, .health, .shot-map-wrap {
-      border-radius: 6px; border-color: transparent;
-    }
-    .stage { border-radius: 4px; }
-    .story-item.recap { border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
+    body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font);
+      font-variant-numeric: tabular-nums; }
+    button, select, input { font: inherit; }
     :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    [hidden] { display: none !important; }
+    .cond { font-stretch: 68%; }
+    .dim { color: var(--ink-dim); }
+    .wrap { max-width: 1360px; margin: 0 auto; padding-inline: 24px; }
+
+    /* ---- header: score band + your view ------------------------------- */
+    header.band { background: var(--band); border-bottom: 1px solid var(--line); }
+    .score-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; padding-block: 16px 8px; }
+    .team-name { font-size: 1.75rem; font-weight: 800; font-stretch: 70%; }
+    .team-name.home { color: var(--home); }
+    .team-name.away { color: var(--away); }
+    .score { font-size: 3.6rem; font-weight: 900; font-stretch: 62%; line-height: 1; }
+    .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: .95rem; }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); display: inline-block; margin-right: 6px; }
+    .clock { font-weight: 700; }
+    .pill { border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: .85rem; }
+    .pill.next { border-color: var(--home); color: var(--ink); }
+    .sim-note { font-size: .8rem; color: var(--ink-dim); }
+    .view-row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding-block: 8px 16px; }
+    .seg { display: inline-flex; background: var(--panel-2); border-radius: 999px; padding: 4px; }
+    .seg button { border: 0; background: transparent; color: var(--ink-dim); font-weight: 600; font-size: .95rem;
+      padding: 9px 18px; border-radius: 999px; cursor: pointer; min-height: 40px; }
+    .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+    .view-row label { display: flex; align-items: center; gap: 8px; font-size: .9rem; color: var(--ink-dim); }
+    .view-row select { background: var(--panel-2); color: var(--ink); border: 1px solid rgba(238,241,232,.14);
+      border-radius: 10px; padding: 9px 12px; min-height: 40px; cursor: pointer; }
+    .view-row select option { background: var(--panel); color: var(--ink); }
+    .team-checks { display: none; align-items: center; gap: 12px; font-size: .9rem; color: var(--ink-dim); }
+    body[data-mode="analyst"] .team-checks { display: flex; }
+    .team-checks input { width: 16px; height: 16px; accent-color: var(--focus); }
+
+    /* ---- layout: one grid, panels placed per mode -------------------- */
+    .grid { display: grid; gap: 24px; padding-block: 24px 48px; grid-template-columns: minmax(0, 1fr);
+      grid-template-areas: "now" "air" "story" "pulse" "lineups" "league" "stats" "activity"; }
+    body[data-mode="analyst"] .grid {
+      grid-template-areas: "keys" "air" "charts" "stats" "pulse" "story" "lineups" "league" "activity"; }
+    @media (min-width: 1000px) {
+      .grid { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+        grid-template-areas: "now air" "story pulse" "story league" "lineups lineups" "stats activity"; }
+      body[data-mode="analyst"] .grid {
+        grid-template-areas: "keys keys" "charts air" "charts pulse" "stats story" "stats league"
+                             "lineups lineups" "activity activity"; }
+    }
+    .p-now { grid-area: now; } .p-air { grid-area: air; } .p-story { grid-area: story; }
+    .p-pulse { grid-area: pulse; } .p-league { grid-area: league; } .p-lineups { grid-area: lineups; }
+    .p-stats { grid-area: stats; } .p-activity { grid-area: activity; } .p-keys { grid-area: keys; }
+    .p-charts { grid-area: charts; }
+    .p-now, .p-keys, .p-charts { display: none; }
+    body:not([data-mode="analyst"]) .p-now { display: flex; }
+    body[data-mode="analyst"] .p-keys { display: grid; }
+    body[data-mode="analyst"] .p-charts { display: flex; }
+    .panel { background: var(--panel); border-radius: 18px; padding: 22px 24px; min-width: 0; }
+    .panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .panel-head h2 { margin: 0; font-size: 1.15rem; font-weight: 700; }
+    .panel-head span { font-size: .85rem; color: var(--ink-dim); }
+    .scroll { max-height: 520px; overflow-y: auto; }
+    .empty { color: var(--ink-dim); font-size: .95rem; }
+
+    /* ---- casual hero: what just happened -------------------------------- */
+    .p-now { flex-direction: column; gap: 12px; padding: 30px 34px; }
+    .now-tag { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: .95rem; color: var(--ink-dim); }
+    .now-tag b { color: var(--gold); }
+    .now-head { margin: 0; font-size: clamp(2rem, 3.6vw, 3.4rem); line-height: 1.04; font-weight: 900; font-stretch: 66%; text-wrap: balance; }
+    .now-sub { margin: 0; font-size: 1.25rem; line-height: 1.5; max-width: 60ch; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip { background: var(--panel-2); border-radius: 8px; padding: 7px 11px; font-size: .95rem; }
+    .chip b { font-weight: 700; }
+
+    /* ---- story timeline ------------------------------------------------- */
+    .story { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 18px; }
+    .story .when { padding: 16px 0; font-size: .9rem; font-weight: 700; color: var(--gold); }
+    .story .when.quiet { color: var(--ink-dim); font-weight: 500; }
+    .story .body { padding: 16px 0; border-top: 1px solid var(--line); }
+    .story .body:nth-child(2) { border-top: 0; }
+    .story h3 { margin: 0 0 6px; font-size: 1.45rem; line-height: 1.15; font-weight: 800; font-stretch: 72%; }
+    .story p { margin: 0 0 6px; font-size: 1.05rem; line-height: 1.55; max-width: 62ch; }
+    .story .older h3 { font-size: 1.2rem; color: rgba(238,241,232,.88); }
+    .story .older p { display: none; }
+    .story .recap { background: rgba(242,165,65,.08); border-radius: 12px; padding: 16px 18px; border-top: 0; margin-bottom: 8px; }
+
+    /* ---- on air: the broadcast preview ------------------------------------ */
+    .stage { position: relative; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden;
+      background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,.35) 100%),
+        repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 2px, transparent 2px 64px),
+        linear-gradient(160deg, #1d6639, #0e3a20); }
+    .pitch-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    .pitch-lines * { fill: none; stroke: rgba(255,255,255,.28); stroke-width: 2.5; }
+    .ball-trail { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+    .ball-trail polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; opacity: .6;
+      stroke-linecap: round; stroke-linejoin: round; }
+    .ball-trail polyline.home { stroke: var(--home); }
+    .ball-trail polyline.away { stroke: var(--away); }
+    .ball { position: absolute; width: 11px; height: 11px; border-radius: 50%; background: #fff; z-index: 1;
+      transform: translate(-50%, -50%); transition-property: left, top; transition-timing-function: linear;
+      left: 50%; top: 50%; }
+    .ball[data-team="home"] { box-shadow: 0 0 0 3px var(--home); }
+    .ball[data-team="away"] { box-shadow: 0 0 0 3px var(--away); }
+    .marker { position: absolute; transform: translate(-50%, -50%); z-index: 2; pointer-events: none; }
+    .marker .ring { display: block; width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--gold);
+      box-shadow: 0 0 14px rgba(242,165,65,.6); animation: pulse 1.2s ease-in-out infinite; }
+    .marker .label { position: absolute; left: 50%; top: 100%; transform: translate(-50%, 6px); white-space: nowrap;
+      background: rgba(11,25,22,.92); font-weight: 700; font-size: .85rem; padding: 3px 9px; border-radius: 6px; }
+    @keyframes pulse { 0%, 100% { transform: scale(1); opacity: .7; } 50% { transform: scale(1.15); opacity: 1; } }
+    .overlay { position: absolute; left: 4%; right: 30%; bottom: 6%; z-index: 3; background: rgba(11,25,22,.93);
+      border-radius: 10px; padding: 12px 16px; border-top: 4px solid var(--home); opacity: 0;
+      transform: translateY(8px); transition: opacity .35s, transform .35s; }
+    .overlay.visible { opacity: 1; transform: none; }
+    .overlay[data-template="player_tag"] { left: auto; right: 4%; bottom: auto; top: 6%; max-width: 50%; text-align: right; }
+    .overlay[data-template="momentum_chart"] { left: 22%; right: 22%; text-align: center; border-top-color: var(--away); }
+    .overlay[data-template="big_chance"] { border-top-color: var(--gold); box-shadow: 0 0 0 1px rgba(242,165,65,.3); }
+    .overlay[data-template="stats_only_fallback"] { border-top-color: var(--muted); }
+    .overlay.focused { box-shadow: 0 0 0 2px var(--focus); }
+    .ov-tag { font-size: .8rem; color: var(--ink-dim); }
+    .ov-head { margin: 2px 0; font-size: clamp(1rem, 1.9vw, 1.5rem); line-height: 1.08; font-weight: 900; font-stretch: 68%; }
+    .ov-sub { margin: 0; font-size: .85rem; color: var(--ink-dim); }
+    .ov-stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .ov-stats span { background: var(--panel-2); border-radius: 6px; padding: 3px 7px; font-size: .78rem; }
+    .metric-pin { position: absolute; left: 3%; top: 5%; z-index: 3; background: rgba(11,25,22,.93); border-radius: 10px;
+      padding: 8px 12px; border-top: 3px solid var(--focus); min-width: 150px; font-size: .85rem; }
+    .metric-pin .lbl { font-size: .75rem; color: var(--ink-dim); margin-bottom: 4px; }
+    .metric-pin .r { display: flex; gap: 8px; align-items: center; }
+    .metric-pin .r i { width: 8px; height: 8px; border-radius: 50%; }
+    .metric-pin .r span { flex: 1; }
+    .air-note { margin: 8px 0 0; font-size: .82rem; color: var(--ink-dim); }
+
+    /* ---- who's in control --------------------------------------------------- */
+    .ribbon { display: block; width: 100%; height: 110px; }
+    .ribbon .axis { stroke: rgba(238,241,232,.2); }
+    .ribbon .half { stroke: rgba(238,241,232,.25); stroke-dasharray: 3 4; }
+    .ribbon .h { fill: rgba(242,165,65,.5); stroke: var(--home); stroke-width: 1.5; }
+    .ribbon .a { fill: rgba(124,198,242,.42); stroke: var(--away); stroke-width: 1.5; }
+    .ribbon path, .ribbon line { vector-effect: non-scaling-stroke; }
+    .control-nums { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+    .control-nums .n { font-size: 2.6rem; font-weight: 900; font-stretch: 62%; line-height: 1; }
+    .control-nums .t { font-size: .95rem; font-weight: 600; }
+    .control-nums .s { font-size: .85rem; color: var(--ink-dim); margin-top: 4px; }
+
+    /* ---- analyst key numbers ------------------------------------------------ */
+    .p-keys { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1px; background: var(--line);
+      border-radius: 18px; overflow: hidden; }
+    .key { background: var(--panel); padding: 18px 22px; }
+    .key .k { font-size: .88rem; color: var(--ink-dim); }
+    .key .v { font-size: 2.8rem; font-weight: 900; font-stretch: 62%; line-height: 1.08; }
+    .key .v small { font-size: 1.6rem; color: rgba(238,241,232,.45); }
+
+    /* ---- charts (analyst) --------------------------------------------------- */
+    .p-charts { flex-direction: column; gap: 12px; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tabs button { border: 1px solid rgba(238,241,232,.14); background: transparent; color: var(--ink-dim);
+      border-radius: 999px; padding: 8px 14px; font-weight: 600; font-size: .9rem; cursor: pointer; min-height: 38px; }
+    .tabs button[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+    .chart-how { margin: 0; font-size: 1rem; line-height: 1.5; color: var(--ink-dim); max-width: 70ch; }
+    .chart-view svg { width: 100%; height: auto; display: block; }
+    .chart-view .ax { font-size: 11px; fill: rgba(238,241,232,.7); font-family: var(--font); }
+    .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: .85rem; color: var(--ink-dim); }
+    .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+    .sub-tabs { display: flex; gap: 6px; }
+    .sub-tabs button { border: 0; background: var(--panel-2); color: var(--ink-dim); border-radius: 8px; padding: 6px 12px; cursor: pointer; font-weight: 600; }
+    .sub-tabs button[aria-pressed="true"] { color: var(--bg); background: var(--ink); }
+    .pct-row { display: grid; grid-template-columns: 190px minmax(0, 1fr) 46px; gap: 12px; align-items: center; font-size: .98rem; padding: 6px 0; }
+    .pct-track { height: 12px; border-radius: 6px; background: rgba(238,241,232,.1); overflow: hidden; }
+    .pct-fill { height: 100%; border-radius: 6px; }
+
+    /* ---- tables ------------------------------------------------------------- */
+    table { width: 100%; border-collapse: collapse; font-size: .98rem; }
+    th { font-weight: 500; color: var(--ink-dim); font-size: .82rem; text-align: right; padding: 0 6px 8px; }
+    td { padding: 9px 6px; border-top: 1px solid var(--line); text-align: right; }
+    th:first-child, td:first-child { text-align: left; }
+    td.l, th.l { text-align: left; }
+    tr.live td { background: rgba(201,242,124,.06); }
+    tr.live td.club { color: var(--focus); font-weight: 700; }
+    tr.focused td { background: rgba(201,242,124,.1); }
+    tr.focused td:first-child { box-shadow: inset 3px 0 0 var(--focus); }
+    tr.dimmed { opacity: .45; }
+    .form { display: inline-flex; gap: 3px; }
+    .form i { width: 20px; height: 20px; border-radius: 4px; font-style: normal; font-size: .72rem; font-weight: 800;
+      color: var(--bg); display: inline-flex; align-items: center; justify-content: center; }
+    .form .W { background: var(--win); } .form .D { background: var(--muted); } .form .L { background: var(--red); }
+    .bar { height: 8px; border-radius: 4px; background: rgba(238,241,232,.1); overflow: hidden; min-width: 80px; }
+    .bar > div { height: 100%; }
+    .club-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .icons { display: inline-flex; gap: 4px; align-items: center; color: var(--ink-dim); font-size: .85rem; }
+    .icons svg { vertical-align: -2px; }
+    .xg-col, .adv { display: none; }
+    body[data-mode="analyst"] .xg-col, body[data-mode="analyst"] .adv { display: table-cell; }
+    .show-all { margin-top: 10px; width: 100%; border: 1px dashed rgba(238,241,232,.2); background: transparent;
+      color: var(--ink-dim); border-radius: 10px; padding: 9px; cursor: pointer; }
+
+    /* ---- line-ups ------------------------------------------------------------ */
+    .lineups { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 28px; }
+    .lu-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+    .lu-head h3 { margin: 0; font-size: 1.25rem; font-weight: 800; font-stretch: 72%; }
+    .lu-row { display: grid; grid-template-columns: 38px 28px minmax(0, 1fr) 40px auto; gap: 10px; align-items: center;
+      padding: 6px 0; border-top: 1px solid var(--line); }
+    .lu-row .no { text-align: right; font-weight: 800; color: var(--ink-dim); }
+    .lu-row .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .lu-row .ps { font-size: .82rem; color: var(--ink-dim); }
+    .lu-row.off .nm { color: var(--ink-dim); }
+    .bench { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .bench span.b { display: inline-flex; align-items: center; gap: 8px; background: var(--panel-2); border-radius: 999px; padding: 4px 12px 4px 4px; font-size: .92rem; }
+
+    /* ---- activity ------------------------------------------------------------ */
+    .act { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+    .act:first-child { border-top: 0; }
+    .act .b { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .75rem; font-weight: 800; }
+    .act.ok .b { background: rgba(111,207,151,.18); color: var(--win); }
+    .act.no .b { background: rgba(143,163,156,.18); color: var(--muted); }
+    .act .h { font-weight: 700; } .act .m { font-size: .88rem; color: var(--ink-dim); }
+    .act .r { font-size: .88rem; color: var(--ink-dim); font-style: italic; }
+
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; animation: none !important; }
     }
+    @media (max-width: 640px) {
+      .score { font-size: 2.6rem; } .team-name { font-size: 1.3rem; }
+      .overlay { right: 4%; }
+      .story { grid-template-columns: 48px minmax(0, 1fr); }
+    }
   </style>
 </head>
-<body>
-  <div class="wrap">
-    <div class="matchbar">
-      <div class="teams">
-        <span id="teamA">—</span><span class="score" id="score">–</span><span id="teamB">—</span>
-        <span class="clock" id="clock">00:00</span>
-        <span class="clock" id="matchweek" hidden></span>
-        <span class="clock next-kickoff" id="nextKickoff" hidden></span>
+<body data-mode="casual">
+  <header class="band">
+    <div class="wrap">
+      <div class="score-row">
+        <span class="team-name home" id="teamA">Home</span>
+        <span class="score" id="score">0–0</span>
+        <span class="team-name away" id="teamB">Away</span>
+        <div class="meta">
+          <span><span class="live-dot" aria-hidden="true"></span><span class="clock" id="clock">0:00</span></span>
+          <span class="pill" id="matchweek" hidden></span>
+          <span class="pill next" id="nextKickoff" hidden></span>
+          <span class="sim-note" id="simNote" hidden></span>
+        </div>
       </div>
-      <div class="controls">
-        <label>Mode <select id="mode"><option value="casual">Casual</option><option value="analyst">Analyst</option></select></label>
+      <div class="view-row" role="group" aria-label="Your view">
+        <div class="seg" role="group" aria-label="Mode">
+          <button type="button" data-mode-btn="casual" aria-pressed="true">Casual</button>
+          <button type="button" data-mode-btn="analyst" aria-pressed="false">Analyst</button>
+        </div>
+        <select id="mode" hidden><option value="casual">Casual</option><option value="analyst">Analyst</option></select>
         <label>Language <select id="lang">
-          <option value="en">English</option><option value="es">Español</option>
-          <option value="fr">Français</option><option value="pt">Português</option>
-          <option value="de">Deutsch</option>
+          <option value="en">English</option><option value="es">Español</option><option value="fr">Français</option>
+          <option value="pt">Português</option><option value="de">Deutsch</option>
         </select></label>
-        <label>Focus <select id="focus"><option value="">Any player</option></select></label>
+        <label>Follow <select id="focus"><option value="">Any player</option></select></label>
         <label>Your metric <select id="metric">
-          <option value="">None</option>
-          <option value="control">Control score</option>
-          <option value="possession">Possession</option>
-          <option value="pass_completion">Pass completion</option>
-          <option value="xg">Expected goals (xG)</option>
-          <option value="shots">Shots</option>
-          <option value="win_prob">Win probability</option>
-          <option value="player_passing">Focused player's passing</option>
+          <option value="">None</option><option value="control">Control score</option>
+          <option value="possession">Possession</option><option value="pass_completion">Pass completion</option>
+          <option value="xg">Expected goals (xG)</option><option value="shots">Shots</option>
+          <option value="win_prob">Win probability</option><option value="player_passing">Followed player's passing</option>
         </select></label>
-        <span class="team-checks" id="teamChecks">
-          <span class="team-checks-label">Team</span>
-          <label class="team-check"><input type="checkbox" id="teamCheckA"> <span id="teamCheckLabelA">—</span></label>
-          <label class="team-check"><input type="checkbox" id="teamCheckB"> <span id="teamCheckLabelB">—</span></label>
-        </span>
+        <div class="team-checks" role="group" aria-label="Filter by club">
+          Show only
+          <label><input type="checkbox" id="teamCheckA"> <span id="teamCheckLabelA">Home</span></label>
+          <label><input type="checkbox" id="teamCheckB"> <span id="teamCheckLabelB">Away</span></label>
+        </div>
       </div>
     </div>
+  </header>
 
-    <div class="health stale" id="health">
-      <div class="health-title">Match pulse
-        <span class="health-note">Each team's control, 0 to 100, minute by minute. Home above the line, away below.</span>
+  <main class="wrap grid">
+    <article class="panel p-now" aria-live="polite">
+      <div class="now-tag" id="nowTag"><span>Waiting for kick-off</span></div>
+      <h1 class="now-head" id="nowHead">The first big moment will appear here</h1>
+      <p class="now-sub" id="nowSub">When something matters, the crew explains why.</p>
+      <div class="chips" id="nowChips"></div>
+    </article>
+
+    <section class="p-keys" aria-label="Key numbers">
+      <div class="key"><div class="k" id="keyWinLabel">Win chance</div><div class="v" id="keyWin">–</div><div class="k" id="keyWinSub"></div></div>
+      <div class="key"><div class="k">Expected goals</div><div class="v" id="keyXg">–</div><div class="k" id="keyXgSub"></div></div>
+      <div class="key"><div class="k">Control now</div><div class="v" id="keyControl">–</div><div class="k">Each team's own 0 to 100 index</div></div>
+      <div class="key"><div class="k">Possession</div><div class="v" id="keyPoss">–</div><div class="k" id="keyPassSub"></div></div>
+    </section>
+
+    <section class="panel p-charts" aria-label="Charts">
+      <div class="panel-head"><h2>Charts</h2><span>Built live from every event in the match</span></div>
+      <div class="tabs" role="tablist" id="chartTabs"></div>
+      <p class="chart-how" id="chartHow"></p>
+      <div class="chart-view" id="chartView"></div>
+    </section>
+
+    <section class="p-air" aria-label="On air">
+      <div class="panel-head"><h2>On air</h2><span>The overlay as viewers see it</span></div>
+      <div class="stage" id="stage">
+        <svg class="pitch-lines" viewBox="0 0 1600 900" preserveAspectRatio="none" aria-hidden="true">
+          <rect x="40" y="40" width="1520" height="820"></rect><line x1="800" y1="40" x2="800" y2="860"></line>
+          <circle cx="800" cy="450" r="130"></circle><rect x="40" y="260" width="230" height="380"></rect>
+          <rect x="40" y="370" width="80" height="160"></rect><rect x="1330" y="260" width="230" height="380"></rect>
+          <rect x="1480" y="370" width="80" height="160"></rect>
+        </svg>
+        <div class="metric-pin" id="metricPin" hidden><div class="lbl" id="metricPinLabel"></div><div id="metricPinValues"></div></div>
+        <div class="overlay" id="overlay">
+          <div class="ov-tag" id="ovTag"></div>
+          <div class="ov-head" id="ovHead"></div>
+          <p class="ov-sub" id="ovSub"></p>
+          <div class="ov-stats" id="ovStats"></div>
+        </div>
       </div>
-      <svg class="ribbon" id="ribbon" viewBox="0 0 900 120" preserveAspectRatio="none" role="img"
-           aria-label="Control over the match for both teams">
-        <line class="ribbon-axis" x1="0" y1="60" x2="900" y2="60"></line>
-        <line class="ribbon-half" x1="450" y1="4" x2="450" y2="116"></line>
-        <path class="ribbon-home" id="ribbonHome"></path>
-        <path class="ribbon-away" id="ribbonAway"></path>
-        <g id="ribbonGoals"></g>
+      <p class="air-note">The ball replays the real event positions; the ring marks where the latest moment happened.</p>
+    </section>
+
+    <section class="panel p-pulse" aria-label="Who's in control">
+      <div class="panel-head"><h2>Who's in control</h2><span>Minute by minute: home above the line, away below</span></div>
+      <svg class="ribbon" viewBox="0 0 900 120" preserveAspectRatio="none" role="img" aria-label="Control over the match for both teams">
+        <line class="axis" x1="0" y1="60" x2="900" y2="60"></line><line class="half" x1="450" y1="4" x2="450" y2="116"></line>
+        <path class="h" id="ribbonHome"></path><path class="a" id="ribbonAway"></path><g id="ribbonGoals"></g>
       </svg>
-      <div class="health-row">
-        <span class="name" id="healthNameA">—</span>
-        <div class="health-bar-wrap">
-          <div class="health-bar"><div class="health-fill" id="healthFillA"></div></div>
-          <div class="health-sub" id="healthSubA">Possession — · Pass completion —</div>
-        </div>
-        <span class="health-num" id="healthNumA">—</span>
+      <div class="control-nums">
+        <div><div class="t" id="ctlNameA" style="color: var(--home)">Home</div><div class="n" id="ctlA">–</div><div class="s" id="ctlSubA"></div></div>
+        <div><div class="t" id="ctlNameB" style="color: var(--away)">Away</div><div class="n" id="ctlB">–</div><div class="s" id="ctlSubB"></div></div>
       </div>
-      <div class="health-row away">
-        <span class="name" id="healthNameB">—</span>
-        <div class="health-bar-wrap">
-          <div class="health-bar"><div class="health-fill" id="healthFillB"></div></div>
-          <div class="health-sub" id="healthSubB">Possession — · Pass completion —</div>
-        </div>
-        <span class="health-num" id="healthNumB">—</span>
-      </div>
+    </section>
 
-      <div class="health-advanced">
-        <div class="health-title">Win · draw · loss
-          <span class="health-note">Deterministic estimate from score + cumulative xG — not a trained model</span>
-        </div>
-        <div class="wdl-bar">
-          <div class="wdl-seg home" id="wdlHome"></div>
-          <div class="wdl-seg draw" id="wdlDraw"></div>
-          <div class="wdl-seg away" id="wdlAway"></div>
-        </div>
-        <div class="wdl-labels">
-          <span id="wdlHomeLabel">— win</span>
-          <span id="wdlDrawLabel">— draw</span>
-          <span id="wdlAwayLabel">— win</span>
-        </div>
-        <div class="ratings-row">
-          <div class="rating-card" id="ratingCardA">
-            <div class="rating-title" id="ratingNameA" role="button" tabindex="0">—</div>
-            <div class="rating-bar-row">
-              <span class="rating-bar-label">Attack</span>
-              <div class="rating-bar"><div class="rating-bar-fill atk" id="atkBarA"></div></div>
-              <b id="atkA">—</b>
-            </div>
-            <div class="rating-bar-row">
-              <span class="rating-bar-label">Defense</span>
-              <div class="rating-bar"><div class="rating-bar-fill def" id="defBarA"></div></div>
-              <b id="defA">—</b>
-            </div>
-            <div class="rating-stat">xG <b id="xgA">—</b></div>
-          </div>
-          <div class="rating-card" id="ratingCardB">
-            <div class="rating-title" id="ratingNameB" role="button" tabindex="0">—</div>
-            <div class="rating-bar-row">
-              <span class="rating-bar-label">Attack</span>
-              <div class="rating-bar"><div class="rating-bar-fill atk" id="atkBarB"></div></div>
-              <b id="atkB">—</b>
-            </div>
-            <div class="rating-bar-row">
-              <span class="rating-bar-label">Defense</span>
-              <div class="rating-bar"><div class="rating-bar-fill def" id="defBarB"></div></div>
-              <b id="defB">—</b>
-            </div>
-            <div class="rating-stat">xG <b id="xgB">—</b></div>
-          </div>
-        </div>
-        <div class="team-filter-note" id="teamFilterNote" hidden>
-          Showing <b id="teamFilterName"></b> only — player stats and shot map filtered to this team
-          <button id="teamFilterClear" type="button">Show both</button>
-        </div>
-      </div>
-    </div>
+    <section class="panel p-story" aria-label="Match story">
+      <div class="panel-head"><h2>Match story</h2><span id="storyCount">Written live by the Narrator</span></div>
+      <div class="story scroll" id="storyList"><div></div><div class="empty">Storylines arrive before kick-off.</div></div>
+    </section>
 
-    <div class="main-grid">
-    <div class="stage">
-      <svg class="pitch-lines" viewBox="0 0 1600 900" preserveAspectRatio="none" aria-hidden="true">
-        <rect x="40" y="40" width="1520" height="820"></rect>
-        <line x1="800" y1="40" x2="800" y2="860"></line>
-        <circle cx="800" cy="450" r="130"></circle>
-        <circle cx="800" cy="450" r="4" fill="rgba(255,255,255,.28)"></circle>
-        <!-- left penalty area + goal -->
-        <rect x="40" y="260" width="230" height="380"></rect>
-        <rect x="40" y="370" width="80" height="160"></rect>
-        <rect class="goal" x="18" y="402" width="22" height="96"></rect>
-        <path d="M 270 350 A 130 130 0 0 1 270 550"></path>
-        <circle cx="210" cy="450" r="4" fill="rgba(255,255,255,.28)"></circle>
-        <!-- right penalty area + goal -->
-        <rect x="1330" y="260" width="230" height="380"></rect>
-        <rect x="1480" y="370" width="80" height="160"></rect>
-        <rect class="goal" x="1560" y="402" width="22" height="96"></rect>
-        <path d="M 1330 350 A 130 130 0 0 0 1330 550"></path>
-        <circle cx="1390" cy="450" r="4" fill="rgba(255,255,255,.28)"></circle>
-        <!-- corner arcs -->
-        <path d="M 40 70 A 30 30 0 0 0 70 40"></path>
-        <path d="M 1530 40 A 30 30 0 0 0 1560 70"></path>
-        <path d="M 1560 830 A 30 30 0 0 0 1530 860"></path>
-        <path d="M 70 860 A 30 30 0 0 0 40 830"></path>
-      </svg>
-      <div class="watermark">Match Health</div>
-      <div class="metric-pin" id="metricPin" hidden>
-        <div class="metric-pin-label" id="metricPinLabel"></div>
-        <div id="metricPinValues"></div>
-      </div>
-      <div id="overlay" class="overlay">
-        <div class="tag" id="tag"></div>
-        <h2 id="headline"></h2>
-        <p class="sub" id="subline"></p>
-        <div id="stats" class="stats"></div>
-      </div>
-    </div>
+    <section class="panel p-league" aria-label="League table">
+      <div class="panel-head"><h2>League table</h2><span id="leagueWeek"></span></div>
+      <table>
+        <thead><tr><th>#</th><th class="l">Club</th><th>P</th><th>GD</th><th class="adv">xG</th><th class="adv">xGA</th><th>Pts</th><th class="l">Form</th></tr></thead>
+        <tbody id="leagueBody"><tr><td colspan="8" class="l empty">Waiting for kick-off</td></tr></tbody>
+      </table>
+    </section>
 
-    <div class="sidebar">
-      <div class="story-panel">
-        <div class="activity-title">Story so far <span id="storyCount"></span></div>
-        <div id="storyList"><div class="empty-note">Storylines arrive before kick-off</div></div>
-      </div>
-      <div class="activity-panel">
-        <div class="activity-title">Agent activity <span id="activityCount">0 decisions</span></div>
-        <div id="activityList"></div>
-      </div>
-      <div class="player-stats-panel">
-        <div class="activity-title"><span id="playerStatsTitle">Player stats</span> <span id="playerStatsCount">0 players</span></div>
-        <div id="playerStatsList"><div class="empty-note">Nobody's made the news yet…</div></div>
-      </div>
-      <div class="league-panel">
-        <div class="activity-title">League table <span id="leagueWeek"></span></div>
-        <table class="league-table">
-          <thead><tr><th>#</th><th class="team">Team</th><th>P</th><th>GD</th>
-            <th class="adv">xG</th><th class="adv">xGA</th><th>Pts</th><th>Form</th></tr></thead>
-          <tbody id="leagueBody"><tr><td colspan="8" class="empty-note">Waiting for kick-off</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-    </div>
+    <section class="panel p-lineups" aria-label="Line-ups">
+      <div class="panel-head"><h2>Line-ups</h2><span>Illustrated avatars, fictional players</span></div>
+      <div class="lineups" id="lineups"><div class="empty">Line-ups arrive at kick-off.</div></div>
+    </section>
 
-    <div class="shot-map-wrap">
-      <div class="health-title">Shot map
-        <span class="health-note">Real shot locations, both teams normalized to one attacking end · dot size = shot quality (xG)</span>
-      </div>
-      <svg class="shot-map" viewBox="0 0 68 25" preserveAspectRatio="xMidYMid meet">
-        <rect x="0" y="0" width="68" height="25" class="shot-map-pitch"></rect>
-        <rect x="13.85" y="0" width="40.3" height="16.5" class="shot-map-box"></rect>
-        <rect x="24.84" y="0" width="18.32" height="5.5" class="shot-map-box"></rect>
-        <line x1="30.34" y1="0.3" x2="37.66" y2="0.3" class="shot-map-goal"></line>
-        <g id="shotMapDots"></g>
-      </svg>
-      <div class="shot-map-legend">
-        <span><i class="legend-dot home"></i><span id="shotLegendA">—</span></span>
-        <span><i class="legend-dot away"></i><span id="shotLegendB">—</span></span>
-        <span><i class="legend-dot goal"></i>Goal</span>
-      </div>
-    </div>
-  </div>
+    <section class="panel p-stats" aria-label="Player stats">
+      <div class="panel-head"><h2 id="statsTitle">Player stats</h2><span id="statsCount"></span></div>
+      <div class="scroll"><table id="statsTable"></table></div>
+      <button type="button" class="show-all" id="statsToggle" hidden></button>
+    </section>
+
+    <section class="panel p-activity" aria-label="Agent activity">
+      <div class="panel-head"><h2>Agent activity</h2><span id="activityCount">0 decisions</span></div>
+      <div class="scroll" id="activityList"></div>
+    </section>
+  </main>
 
   <script>
-    // Two message shapes arrive on the same socket:
-    //  - {"base": Overlay, "variants": [...]} -- a moment to show, see schemas/overlay.schema.json
-    //  - {"show_at": "MM:SS", "teams": {name: HealthSnapshot}} -- a live health tick
-    const TAG_LABEL = {
-      lower_third_stat: 'Insight', player_tag: 'Player', stat_compare: 'Compare',
-      momentum_chart: 'Momentum', big_chance: 'Big chance', stats_only_fallback: 'Auto-recovery · stats only',
+    // Message shapes on the socket (run.py / orchestrator.py / narrator.py):
+    //  {catchup}   everything so far, for viewers who join late
+    //  {season, fixture}  table, form, squads, sim speed
+    //  {teams, ...}       health tick (+ path, analytics, player_passes, shots, subs)
+    //  {kind, ...}        a Spotter decision (with x/y of the moment)
+    //  {base, variants}   an overlay
+    //  {narrative} / {narratives}  Narrator output
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const TAG_LABEL = { lower_third_stat: 'Insight', player_tag: 'Player', stat_compare: 'Compare',
+      momentum_chart: 'Momentum', big_chance: 'Big moment', stats_only_fallback: 'Auto-recovery, stats only' };
+    const KIND_LABEL = { goal: 'Goal', big_chance: 'Big chance', control_swing: 'Momentum swing',
+      pressing_spell: 'Pressing spell', speed_milestone: 'Thunderbolt', foul: 'Card', pass_quality: 'Pass under pressure' };
+    const ICON = {
+      goal: '<svg viewBox="0 0 16 16" width="15" height="15" role="img" aria-label="Goal"><circle cx="8" cy="8" r="6.5" fill="#eef1e8"/><path d="M8 4.6l2.5 1.8-1 3H6.5l-1-3z" fill="#0b1916"/></svg>',
+      yellow: '<svg viewBox="0 0 12 16" width="11" height="15" role="img" aria-label="Yellow card"><rect x="1" y="1" width="10" height="14" rx="2" fill="#f2c641"/></svg>',
+      red: '<svg viewBox="0 0 12 16" width="11" height="15" role="img" aria-label="Red card"><rect x="1" y="1" width="10" height="14" rx="2" fill="#e5484d"/></svg>',
+      big_chance: '<svg viewBox="0 0 16 16" width="15" height="15" role="img" aria-label="Big chance"><circle cx="8" cy="8" r="6" fill="none" stroke="#f2a541" stroke-width="2"/><circle cx="8" cy="8" r="2" fill="#f2a541"/></svg>',
+      speed_milestone: '<svg viewBox="0 0 16 16" width="15" height="15" role="img" aria-label="Thunderbolt shot"><path d="M9 1L3 9h4l-1 6 6-8H8z" fill="#7cc6f2"/></svg>',
+      pass_quality: '<svg viewBox="0 0 16 16" width="15" height="15" role="img" aria-label="Pass under pressure"><path d="M2 12l5-5 3 3 4-6" fill="none" stroke="#c9f27c" stroke-width="2" stroke-linecap="round"/></svg>',
+      on: '<svg viewBox="0 0 16 16" width="14" height="14" role="img" aria-label="Came on"><path d="M8 13V3M4 7l4-4 4 4" fill="none" stroke="#6fcf97" stroke-width="2" stroke-linecap="round"/></svg>',
+      off: '<svg viewBox="0 0 16 16" width="14" height="14" role="img" aria-label="Came off"><path d="M8 3v10M4 9l4 4 4-4" fill="none" stroke="#e5484d" stroke-width="2" stroke-linecap="round"/></svg>',
     };
 
-    const pick = (msg) => {
-      const mode = document.getElementById('mode').value;
-      const lang = document.getElementById('lang').value;
-      return msg.variants.find(v => v.mode === mode && v.language === lang)
-        || msg.variants.find(v => v.mode === mode)
-        || msg.base;
-    };
+    // ---- state ---------------------------------------------------------------
+    let teamNames = null, lastHealth = null, lastMsg = null, fixture = null, lastShots = [];
+    let analytics = null, players = {}, subs = [], teamFilter = [];
+    let pulse = [], pulseGoals = [], lastScore = null;
+    const narratives = new Map(), seenPlayers = new Set(), momentLoc = new Map();
+    const tallies = new Map(); // player -> {team, counts:{goal,yellow,...}, total, last}
+    let activityCount = 0;
+    const mode = () => $('mode').value, lang = () => $('lang').value;
 
-    function shortLabel(label) {
-      // Long agent-generated labels ("Opponent pass completion pct") don't
-      // leave room for chips to sit side by side in the card -- trim rather
-      // than let them each claim a full row.
-      return label.length > 20 ? label.slice(0, 19) + '…' : label;
+    // ---- mode switch ----------------------------------------------------------
+    function setMode(m) {
+      $('mode').value = m;
+      document.body.dataset.mode = m;
+      document.querySelectorAll('[data-mode-btn]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.modeBtn === m)));
+      rerenderAll();
     }
-    function statChip(s) {
-      const label = shortLabel(s.label);
-      if (s.from != null && s.to != null) {
-        const up = s.to >= s.from;
-        return `<span class="stat-chip">${label} <span class="stat-arrow ${up ? 'up' : 'down'}">${up ? '▲' : '▼'}</span> <b>${s.from} → ${s.to}</b></span>`;
-      }
-      return `<span class="stat-chip">${label}: <b>${s.value ?? '—'}</b></span>`;
-    }
+    document.querySelectorAll('[data-mode-btn]').forEach(b => b.addEventListener('click', () => setMode(b.dataset.modeBtn)));
+    $('mode').addEventListener('change', () => setMode($('mode').value));
 
-    function compareBar(s, maxAbs) {
-      const val = s.value ?? s.to ?? 0;
-      const pct = maxAbs ? Math.min(100, Math.abs(val) / maxAbs * 100) : 0;
-      return `<div class="compare-bar"><span class="label">${s.label}</span>
-        <div class="compare-track"><div class="compare-fill" style="width:${pct}%"></div></div>
-        <b>${val}</b></div>`;
-    }
-
-    // Ambient player dots -- atmosphere only, see the .player-dot CSS comment
-    // for why this isn't driven by real per-player tracking data. Each dot
-    // wanders locally around its own anchor on its own independent clock --
-    // moving all dots to a brand-new pitch-wide point in lockstep looked
-    // robotic, so this staggers timing/distance/speed per dot instead.
-    const PITCH_BOUNDS = { xMin: 7, xMax: 93, yMin: 10, yMax: 90 }; // % of .stage
-    function randIn(min, max) { return min + Math.random() * (max - min); }
-    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
-
-    function wanderLoop(el, { radius, minDelay, maxDelay, minDur, maxDur, startAnchor }) {
-      const anchor = startAnchor || {
-        x: randIn(PITCH_BOUNDS.xMin, PITCH_BOUNDS.xMax),
-        y: randIn(PITCH_BOUNDS.yMin, PITCH_BOUNDS.yMax),
-      };
-      el.style.left = `${anchor.x}%`;
-      el.style.top = `${anchor.y}%`;
-      function step() {
-        // occasionally drift the anchor itself so dots don't orbit forever
-        // in one tiny patch of pitch
-        if (Math.random() < 0.15) {
-          anchor.x = clamp(anchor.x + randIn(-15, 15), PITCH_BOUNDS.xMin, PITCH_BOUNDS.xMax);
-          anchor.y = clamp(anchor.y + randIn(-15, 15), PITCH_BOUNDS.yMin, PITCH_BOUNDS.yMax);
-        }
-        const x = clamp(anchor.x + randIn(-radius, radius), PITCH_BOUNDS.xMin, PITCH_BOUNDS.xMax);
-        const y = clamp(anchor.y + randIn(-radius, radius), PITCH_BOUNDS.yMin, PITCH_BOUNDS.yMax);
-        const duration = randIn(minDur, maxDur);
-        el.style.transitionDuration = `${duration}s`;
-        el.style.left = `${x}%`;
-        el.style.top = `${y}%`;
-        setTimeout(step, randIn(minDelay, maxDelay) * 1000);
-      }
-      setTimeout(step, randIn(0, maxDelay) * 1000); // stagger the first move per dot
-    }
-
-    // Rough kickoff shape (not a real formation feed -- just a sane starting
-    // spread) so dots don't appear scattered randomly across the pitch
-    // before their first wander move.
-    const HOME_FORMATION = [
-      { x: 12, y: 50 }, { x: 25, y: 22 }, { x: 25, y: 50 }, { x: 25, y: 78 },
-      { x: 38, y: 35 }, { x: 38, y: 65 }, { x: 46, y: 50 },
-    ];
-    const AWAY_FORMATION = [
-      { x: 88, y: 50 }, { x: 75, y: 22 }, { x: 75, y: 50 }, { x: 75, y: 78 },
-      { x: 62, y: 35 }, { x: 62, y: 65 }, { x: 54, y: 50 },
-    ];
-
-    function spawnAmbientPitch() {
-      const stage = document.querySelector('.stage');
-      HOME_FORMATION.forEach((pos) => {
-        const d = document.createElement('div');
-        d.className = 'player-dot home';
-        stage.appendChild(d);
-        wanderLoop(d, { radius: 16, minDelay: 1.5, maxDelay: 4, minDur: 1.8, maxDur: 3.5,
-                         startAnchor: pos });
-      });
-      AWAY_FORMATION.forEach((pos) => {
-        const d = document.createElement('div');
-        d.className = 'player-dot away';
-        stage.appendChild(d);
-        wanderLoop(d, { radius: 16, minDelay: 1.5, maxDelay: 4, minDur: 1.8, maxDur: 3.5,
-                         startAnchor: pos });
-      });
-      const ballWrap = document.createElement('div');
-      ballWrap.className = 'ball-wrap';
-      ballWrap.innerHTML = `
-        <div class="ball-dot"></div>
-        <div class="spotlight-ring" id="spotlightRing" hidden></div>
-        <div class="spotlight-initials" id="spotlightInitials" hidden></div>
-      `;
-      stage.appendChild(ballWrap);
-      wanderLoop(ballWrap, { radius: 22, minDelay: 0.8, maxDelay: 2, minDur: 0.6, maxDur: 1.3 });
-      return ballWrap;
-    }
-    spawnAmbientPitch();
-
-    // Player focus: client-side only. Any player name seen in base.focus_player
-    // becomes selectable; comparisons always use the real base value, never a
-    // persona-relabelled variant, so "focused" is always honest.
-    const seenPlayers = new Set();
-    function registerPlayer(name) {
-      if (!name || seenPlayers.has(name)) return;
-      seenPlayers.add(name);
-      const opt = document.createElement('option');
-      opt.value = name; opt.textContent = name;
-      document.getElementById('focus').appendChild(opt);
-    }
-
-    function initials(name) {
-      return name.split(/\s+/).map(p => p.replace(/\W/g, '')[0] || '').join('').toUpperCase().slice(0, 2);
-    }
-
-    let spotlightTimer = null;
-    function showSpotlight(player, durationS) {
-      const ring = document.getElementById('spotlightRing');
-      const label = document.getElementById('spotlightInitials');
-      label.textContent = initials(player);
-      ring.hidden = false;
-      label.hidden = false;
-      clearTimeout(spotlightTimer);
-      spotlightTimer = setTimeout(() => { ring.hidden = true; label.hidden = true; }, durationS * 1000);
-    }
-
+    // ---- overlay + hero ---------------------------------------------------------
+    const pick = msg => msg.variants.find(v => v.mode === mode() && v.language === lang())
+      || msg.variants.find(v => v.mode === mode()) || msg.base;
+    const statText = s => (s.from != null && s.to != null) ? `${esc(s.label)} <b>${s.from} → ${s.to}</b>`
+      : `${esc(s.label)} <b>${esc(s.value ?? '–')}</b>`;
     let hideTimer = null;
-    function show(msg) {
-      const o = pick(msg);
-      const el = document.getElementById('overlay');
+    function show(msg, live = true) {
+      const o = pick(msg), base = msg.base, who = base.focus_player;
+      const el = $('overlay');
       el.dataset.template = o.template;
-
-      // The real player this moment is about (always msg.base, never a
-      // persona-relabelled variant). Shown right in the tag line so it's
-      // unambiguous which player the
-      // floating possession ring (on the ambient ball marker, elsewhere on
-      // the pitch) corresponds to, rather than relying on spatial proximity.
-      const truePlayer = msg.base.focus_player;
-      const tagBase = TAG_LABEL[o.template] || o.template;
-      document.getElementById('tag').textContent = truePlayer ? `${tagBase} · ${truePlayer}` : tagBase;
-      document.getElementById('headline').textContent = o.headline;
-      document.getElementById('subline').textContent = o.subline || '';
-
-      // Sync the header clock to this moment's own timestamp. The clock is
-      // otherwise only advanced by periodic health ticks (every 10 events),
-      // which can race ahead of an overlay that took a little longer to
-      // process (e.g. Cosmos write latency) -- without this, the displayed
-      // time could be later than the moment actually being narrated.
-      document.getElementById('clock').textContent = msg.base.show_at;
-
-      if (o.template === 'stat_compare') {
-        const maxAbs = Math.max(1, ...o.stats.map(s => Math.abs(s.value ?? s.to ?? 0)));
-        document.getElementById('stats').innerHTML = o.stats.map(s => compareBar(s, maxAbs)).join('');
-      } else {
-        document.getElementById('stats').innerHTML = o.stats.map(statChip).join('');
-      }
-
-      if (truePlayer) registerPlayer(truePlayer);
-      const focusChoice = document.getElementById('focus').value;
-      el.classList.toggle('focused', !!focusChoice && truePlayer === focusChoice);
-      if (truePlayer) showSpotlight(truePlayer, o.duration_s);
-
+      $('ovTag').textContent = who ? `${TAG_LABEL[o.template] || ''}, ${who}` : (TAG_LABEL[o.template] || '');
+      $('ovHead').textContent = o.headline;
+      $('ovSub').textContent = o.subline || '';
+      $('ovStats').innerHTML = (o.stats || []).slice(0, 3).map(s => `<span>${statText(s)}</span>`).join('');
+      el.classList.toggle('focused', !!$('focus').value && who === $('focus').value);
       el.classList.add('visible');
       clearTimeout(hideTimer);
       hideTimer = setTimeout(() => el.classList.remove('visible'), o.duration_s * 1000);
+      // Casual hero: the same moment, big.
+      $('nowTag').innerHTML = `<b>${esc(base.show_at)}</b><span>${esc(TAG_LABEL[o.template] || '')}${who ? ', ' + esc(who) : ''}</span>`;
+      $('nowHead').textContent = o.headline;
+      $('nowSub').textContent = o.subline || '';
+      $('nowChips').innerHTML = (o.stats || []).map(s => `<span class="chip">${statText(s)}</span>`).join('');
+      if (!live) return;  // re-rendering for a new mode/language: keep clock and marker as they are
+      $('clock').textContent = base.show_at;
+      if (who) registerPlayer(who);
+      showMarker(base.moment_id, who, o.duration_s);
     }
 
-    let teamNames = null;
+    // ---- pitch: real positions --------------------------------------------------
+    const stage = $('stage');
+    const toPct = (x, y) => [2.5 + x / 105 * 95, 4.44 + y / 68 * 91.12];
+    const SVGNS = 'http://www.w3.org/2000/svg';
+    const trailSvg = document.createElementNS(SVGNS, 'svg');
+    trailSvg.setAttribute('class', 'ball-trail'); trailSvg.setAttribute('viewBox', '0 0 100 100');
+    trailSvg.setAttribute('preserveAspectRatio', 'none'); trailSvg.setAttribute('aria-hidden', 'true');
+    const trailLine = document.createElementNS(SVGNS, 'polyline');
+    trailSvg.appendChild(trailLine); stage.appendChild(trailSvg);
+    const ball = document.createElement('div'); ball.className = 'ball'; stage.appendChild(ball);
+    const marker = document.createElement('div'); marker.className = 'marker'; marker.hidden = true;
+    marker.innerHTML = '<span class="ring"></span><span class="label"></span>'; stage.appendChild(marker);
+    let trail = [], pathTimers = [], lastTickAt = 0, markerTimer = null;
+    function playPath(path) {
+      const now = performance.now();
+      const gap = lastTickAt ? Math.min(8000, Math.max(800, now - lastTickAt)) : 3000;
+      lastTickAt = now;
+      pathTimers.forEach(clearTimeout);
+      const step = gap / path.length;
+      pathTimers = path.map(([x, y, team], i) => setTimeout(() => {
+        const [l, t] = toPct(x, y);
+        ball.style.transitionDuration = `${Math.max(120, step * 0.9)}ms`;
+        ball.style.left = `${l}%`; ball.style.top = `${t}%`;
+        ball.dataset.team = team === 0 ? 'home' : 'away';
+        trail = [...trail, [l, t]].slice(-6);
+        trailLine.setAttribute('points', trail.map(p => p.join(',')).join(' '));
+        trailLine.setAttribute('class', team === 0 ? 'home' : 'away');
+      }, i * step));
+    }
+    function showMarker(id, label, secs) {
+      const loc = momentLoc.get(id);
+      if (!loc) return;
+      const [l, t] = toPct(loc.x, loc.y);
+      marker.style.left = `${l}%`; marker.style.top = `${t}%`;
+      const lab = marker.querySelector('.label');
+      lab.textContent = label || ''; lab.hidden = !label;
+      marker.hidden = false;
+      clearTimeout(markerTimer);
+      markerTimer = setTimeout(() => { marker.hidden = true; }, secs * 1000);
+    }
+
+    // ---- health tick -------------------------------------------------------------
     function updateHealth(msg) {
-      const names = Object.keys(msg.teams);
       if (!teamNames) {
-        teamNames = names;
-        document.getElementById('teamA').textContent = names[0];
-        document.getElementById('teamB').textContent = names[1];
-        document.getElementById('healthNameA').textContent = names[0];
-        document.getElementById('healthNameB').textContent = names[1];
-        document.getElementById('teamCheckLabelA').textContent = names[0];
-        document.getElementById('teamCheckLabelB').textContent = names[1];
+        teamNames = Object.keys(msg.teams);
+        $('teamA').textContent = teamNames[0]; $('teamB').textContent = teamNames[1];
+        $('ctlNameA').textContent = teamNames[0]; $('ctlNameB').textContent = teamNames[1];
+        $('teamCheckLabelA').textContent = teamNames[0]; $('teamCheckLabelB').textContent = teamNames[1];
       }
-      document.getElementById('clock').textContent = msg.show_at;
-      document.getElementById('health').classList.remove('stale');
-      const [a, b] = teamNames.map(n => msg.teams[n]);
-      document.getElementById('healthFillA').style.width = `${a.control}%`;
-      document.getElementById('healthNumA').textContent = a.control.toFixed(0);
-      document.getElementById('healthSubA').textContent =
-        `Possession ${a.possession_pct.toFixed(0)}% · Pass completion ${a.pass_completion_pct.toFixed(0)}%`;
-      document.getElementById('healthFillB').style.width = `${b.control}%`;
-      document.getElementById('healthNumB').textContent = b.control.toFixed(0);
-      document.getElementById('healthSubB').textContent =
-        `Possession ${b.possession_pct.toFixed(0)}% · Pass completion ${b.pass_completion_pct.toFixed(0)}%`;
-      if (msg.score) {
-        document.getElementById('score').textContent =
-          `${msg.score[teamNames[0]]} – ${msg.score[teamNames[1]]}`;
-      }
-      if (msg.ratings) updateRatings(msg.ratings);
-      if (msg.win_draw_loss) updateWdl(msg.win_draw_loss);
-      if (msg.shots) updateShotMap(msg.shots);
-      if (msg.player_passes) mergePassStats(msg.player_passes);
-      lastHealth = msg;
-      renderMetricPin();
+      $('clock').textContent = msg.show_at;
+      if (msg.score) $('score').textContent = `${msg.score[teamNames[0]]}–${msg.score[teamNames[1]]}`;
+      if (msg.shots) lastShots = msg.shots;
+      if (msg.analytics) analytics = msg.analytics;
+      if (msg.player_passes) { players = msg.player_passes; Object.keys(players).forEach(registerPlayer); }
+      if (msg.subs) subs = msg.subs;
+      if (msg.path && msg.path.length) playPath(msg.path);
+      lastHealth = { ...(lastHealth || {}), ...msg };
       recordPulse(msg);
+      renderControl(); renderKeys(); renderMetricPin();
+      if (msg.player_passes || msg.subs) { renderStats(); renderLineups(); }
+      if (mode() === 'analyst' && (msg.analytics || msg.shots)) renderChart();
     }
 
-    // Match pulse: one point per health tick, home control above the centre
-    // line and away below, plus a marker wherever the score changed.
-    let pulse = [], pulseGoals = [], lastScore = null;
     function recordPulse(msg) {
       const min = toSeconds(msg.show_at) / 60;
-      if (pulse.length && min < pulse[pulse.length - 1].min - 1) {  // a new match started
-        pulse = []; pulseGoals = []; lastScore = null;
-      }
-      const [A, B] = teamNames;
-      pulse.push({ min, a: msg.teams[A].control, b: msg.teams[B].control });
+      if (pulse.length && min < pulse[pulse.length - 1].min - 1) { pulse = []; pulseGoals = []; lastScore = null; }
+      const [A, B] = teamNames, w = msg.win_draw_loss || {};
+      pulse.push({ min, a: msg.teams[A].control, b: msg.teams[B].control, hw: w.home_win_pct, d: w.draw_pct, aw: w.away_win_pct });
       if (msg.score) {
         if (lastScore) {
           if (msg.score[A] > lastScore[A]) pulseGoals.push({ min, team: A });
@@ -1049,524 +529,435 @@
       drawPulse();
     }
     function drawPulse() {
-      if (!pulse.length) return;
+      if (!pulse.length || !teamNames) return;
       const x = m => (Math.min(m, 90) / 90 * 900).toFixed(1);
-      const area = (sign, key) => {
-        const pts = pulse.map(p => `${x(p.min)},${(60 - sign * p[key] * 0.56).toFixed(1)}`);
-        return `M${x(pulse[0].min)},60 L${pts.join(' L')} L${x(pulse[pulse.length - 1].min)},60 Z`;
-      };
-      document.getElementById('ribbonHome').setAttribute('d', area(1, 'a'));
-      document.getElementById('ribbonAway').setAttribute('d', area(-1, 'b'));
-      document.getElementById('ribbonGoals').innerHTML = pulseGoals.map(g =>
-        `<ellipse class="ribbon-goal" cx="${x(g.min)}" cy="60" rx="4" ry="9"
-           fill="var(${g.team === teamNames[0] ? '--control' : '--away'})"><title>Goal, ${g.team}</title></ellipse>`).join('');
+      const area = (sign, key) => `M${x(pulse[0].min)},60 L${pulse.map(p => `${x(p.min)},${(60 - sign * p[key] * 0.56).toFixed(1)}`).join(' L')} L${x(pulse[pulse.length - 1].min)},60 Z`;
+      $('ribbonHome').setAttribute('d', area(1, 'a'));
+      $('ribbonAway').setAttribute('d', area(-1, 'b'));
+      $('ribbonGoals').innerHTML = pulseGoals.map(g => `<ellipse cx="${x(g.min)}" cy="60" rx="4" ry="9" fill="var(${g.team === teamNames[0] ? '--home' : '--away'})" stroke="#0b1916" stroke-width="2"><title>Goal, ${esc(g.team)}</title></ellipse>`).join('');
+    }
+    function renderControl() {
+      if (!lastHealth || !teamNames) return;
+      const [A, B] = teamNames.map(n => lastHealth.teams[n]);
+      $('ctlA').textContent = A.control.toFixed(0); $('ctlB').textContent = B.control.toFixed(0);
+      $('ctlSubA').textContent = `Possession ${A.possession_pct.toFixed(0)}%, passing ${A.pass_completion_pct.toFixed(0)}%`;
+      $('ctlSubB').textContent = `Possession ${B.possession_pct.toFixed(0)}%, passing ${B.pass_completion_pct.toFixed(0)}%`;
+    }
+    function renderKeys() {
+      if (!lastHealth || !teamNames) return;
+      const [A, B] = teamNames, h = lastHealth, w = h.win_draw_loss, r = h.ratings;
+      if (w) {
+        const homeFav = w.home_win_pct >= w.away_win_pct;
+        $('keyWinLabel').textContent = `Win chance, ${homeFav ? A : B}`;
+        $('keyWin').textContent = `${(homeFav ? w.home_win_pct : w.away_win_pct).toFixed(0)}%`;
+        $('keyWinSub').textContent = `Draw ${w.draw_pct.toFixed(0)}%, ${homeFav ? B : A} ${(homeFav ? w.away_win_pct : w.home_win_pct).toFixed(0)}%`;
+      }
+      if (r) {
+        $('keyXg').innerHTML = `<span style="color:var(--home)">${r[A].xg.toFixed(2)}</span> <small>v</small> <span style="color:var(--away)">${r[B].xg.toFixed(2)}</span>`;
+        const sa = h.score?.[A] ?? 0, sb = h.score?.[B] ?? 0;
+        const more = r[A].xg > r[B].xg ? A : B, ahead = sa === sb ? null : (sa > sb ? A : B);
+        $('keyXgSub').textContent = ahead && ahead !== more ? `${more} creating more, ${ahead} scoring more` : `${r[A].shots} shots v ${r[B].shots}`;
+      }
+      $('keyControl').innerHTML = `<span style="color:var(--home)">${h.teams[A].control.toFixed(0)}</span> <small>v</small> <span style="color:var(--away)">${h.teams[B].control.toFixed(0)}</span>`;
+      $('keyPoss').innerHTML = `<span style="color:var(--home)">${h.teams[A].possession_pct.toFixed(0)}</span> <small>v</small> <span style="color:var(--away)">${h.teams[B].possession_pct.toFixed(0)}</span>`;
+      $('keyPassSub').textContent = `Pass completion ${h.teams[A].pass_completion_pct.toFixed(0)}% v ${h.teams[B].pass_completion_pct.toFixed(0)}%`;
     }
 
-    // "Your metric" (brief: "a single performance metric a viewer cares
-    // about"). Pure view over the latest health tick -- no extra data feed.
-    let lastHealth = null;
-    const METRIC_LABEL = {
-      control: 'Control score', possession: 'Possession', pass_completion: 'Pass completion',
-      xg: 'Expected goals (xG)', shots: 'Shots', win_prob: 'Win probability',
-      player_passing: 'Passing',
-    };
-    function metricRow(cls, name, value) {
-      const row = document.createElement('div');
-      row.className = 'metric-pin-row';
-      row.innerHTML = `<i class="${cls}"></i><span class="team"></span><b></b>`;
-      row.querySelector('.team').textContent = name;
-      row.querySelector('b').textContent = value;
-      return row;
-    }
+    // ---- your metric (pinned on the pitch) -------------------------------------
+    const METRIC_LABEL = { control: 'Control score', possession: 'Possession', pass_completion: 'Pass completion',
+      xg: 'Expected goals (xG)', shots: 'Shots', win_prob: 'Win probability', player_passing: 'Passing' };
     function renderMetricPin() {
-      const metric = document.getElementById('metric').value;
-      const pin = document.getElementById('metricPin');
-      pin.hidden = !metric;
-      if (!metric) return;
-      const label = document.getElementById('metricPinLabel');
-      const values = document.getElementById('metricPinValues');
-      label.textContent = METRIC_LABEL[metric];
-      values.replaceChildren();
-      const note = (text) => {
-        const d = document.createElement('div');
-        d.className = 'empty-note'; d.textContent = text; values.appendChild(d);
-      };
-      if (!lastHealth || !teamNames) { note('Waiting for kick-off'); return; }
-      const h = lastHealth;
-      const [A, B] = teamNames;
-      const perTeam = {
-        control: n => h.teams[n].control.toFixed(0),
-        possession: n => `${h.teams[n].possession_pct.toFixed(0)}%`,
-        pass_completion: n => `${h.teams[n].pass_completion_pct.toFixed(0)}%`,
-        xg: n => h.ratings ? h.ratings[n].xg.toFixed(2) : '—',
-        shots: n => h.ratings ? String(h.ratings[n].shots) : '—',
-      }[metric];
-      if (perTeam) {
-        values.append(metricRow('home', A, perTeam(A)), metricRow('away', B, perTeam(B)));
-      } else if (metric === 'win_prob') {
+      const m = $('metric').value, pin = $('metricPin'), vals = $('metricPinValues');
+      pin.hidden = !m;
+      if (!m) return;
+      $('metricPinLabel').textContent = METRIC_LABEL[m];
+      const row = (cls, name, v) => `<div class="r"><i style="background:var(${cls})"></i><span>${esc(name)}</span><b>${esc(v)}</b></div>`;
+      if (!lastHealth || !teamNames) { vals.innerHTML = '<div class="empty">Waiting for kick-off</div>'; return; }
+      const h = lastHealth, [A, B] = teamNames;
+      const per = { control: n => h.teams[n].control.toFixed(0), possession: n => `${h.teams[n].possession_pct.toFixed(0)}%`,
+        pass_completion: n => `${h.teams[n].pass_completion_pct.toFixed(0)}%`, xg: n => h.ratings[n].xg.toFixed(2),
+        shots: n => String(h.ratings[n].shots) }[m];
+      if (per) vals.innerHTML = row('--home', A, per(A)) + row('--away', B, per(B));
+      else if (m === 'win_prob' && h.win_draw_loss) {
         const w = h.win_draw_loss;
-        if (!w) { note('Not available yet'); return; }
-        values.append(metricRow('home', A, `${w.home_win_pct.toFixed(0)}%`),
-                      metricRow('draw', 'Draw', `${w.draw_pct.toFixed(0)}%`),
-                      metricRow('away', B, `${w.away_win_pct.toFixed(0)}%`));
-      } else if (metric === 'player_passing') {
-        const player = document.getElementById('focus').value;
-        if (!player) { note('Choose a player in Focus'); return; }
-        label.textContent = `${player} · passing`;
-        const p = (h.player_passes || {})[player];
-        if (!p || !p.attempts) { note('No passes yet'); return; }
-        const cls = p.team === A ? 'home' : 'away';
-        values.append(
-          metricRow(cls, 'Completed', `${p.completions}/${p.attempts}`),
-          metricRow(cls, 'Accuracy', `${Math.round(100 * p.completions / p.attempts)}%`));
+        vals.innerHTML = row('--home', A, `${w.home_win_pct.toFixed(0)}%`) + row('--muted', 'Draw', `${w.draw_pct.toFixed(0)}%`) + row('--away', B, `${w.away_win_pct.toFixed(0)}%`);
+      } else if (m === 'player_passing') {
+        const name = $('focus').value, p = players[name];
+        if (!name) { vals.innerHTML = '<div class="empty">Choose a player in Follow</div>'; return; }
+        $('metricPinLabel').textContent = `${name}, passing`;
+        vals.innerHTML = p && p.attempts ? row(p.team === A ? '--home' : '--away', 'Completed', `${p.completions}/${p.attempts}`)
+          + row(p.team === A ? '--home' : '--away', 'Accuracy', `${Math.round(100 * p.completions / p.attempts)}%`) : '<div class="empty">No passes yet</div>';
       }
     }
 
-    function updateShotMap(shots) {
-      lastShots = shots;
-      document.getElementById('shotLegendA').textContent = teamNames[0];
-      document.getElementById('shotLegendB').textContent = teamNames[1];
-      const g = document.getElementById('shotMapDots');
-      const visible = teamFilter.length ? shots.filter(s => teamFilter.includes(s.team)) : shots;
-      if (!visible.length) { g.innerHTML = ''; return; }
-      g.innerHTML = visible.map(s => {
-        const r = (0.45 + (s.xg || 0) * 1.4).toFixed(2);  // viewBox is only 68 units wide
-        const teamCls = s.team === teamNames[0] ? 'home' : 'away';
-        const outcomeCls = s.is_goal ? 'goal' : (s.outcome === 'on_target' ? 'on-target' : 'off-target');
-        const label = s.is_goal ? 'GOAL' : s.outcome.replace('_', ' ');
-        const title = `${s.player || s.team} (${s.team}) — ${label}, xG ${(s.xg ?? 0).toFixed(2)}`;
-        return `<circle class="shot-dot ${teamCls} ${outcomeCls}" cx="${s.y}" cy="${105 - s.display_x}" r="${r}"><title>${title}</title></circle>`;
-      }).join('');
-    }
-
-    function updateRatings(ratings) {
-      const [a, b] = teamNames.map(n => ratings[n]);
-      document.getElementById('ratingNameA').textContent = teamNames[0];
-      document.getElementById('ratingNameB').textContent = teamNames[1];
-      document.getElementById('atkA').textContent = a.attack.toFixed(0);
-      document.getElementById('defA').textContent = a.defense.toFixed(0);
-      document.getElementById('xgA').textContent = a.xg.toFixed(2);
-      document.getElementById('atkBarA').style.width = `${a.attack}%`;
-      document.getElementById('defBarA').style.width = `${a.defense}%`;
-      document.getElementById('atkB').textContent = b.attack.toFixed(0);
-      document.getElementById('defB').textContent = b.defense.toFixed(0);
-      document.getElementById('xgB').textContent = b.xg.toFixed(2);
-      document.getElementById('atkBarB').style.width = `${b.attack}%`;
-      document.getElementById('defBarB').style.width = `${b.defense}%`;
-      applyTeamFilterStyling();
-    }
-
-    // Team filter (analyst mode): check one or more teams in the controls
-    // bar, or click a team's name in the ratings row, to scope player stats
-    // + the shot map down to those teams -- a pure client-side view filter,
-    // not a narrative/personalization change. teamFilter is an array so the
-    // same control works if a future match ever has more than two teams;
-    // checking every team (or none) is treated as "no filter" rather than
-    // trapping the viewer on a blank screen.
-    let teamFilter = [];
-    let lastShots = [];
-    function applyTeamFilter() {
-      const checked = [];
-      if (document.getElementById('teamCheckA').checked) checked.push(teamNames[0]);
-      if (document.getElementById('teamCheckB').checked) checked.push(teamNames[1]);
-      teamFilter = (checked.length === 0 || checked.length === teamNames.length) ? [] : checked;
-      document.getElementById('teamFilterNote').hidden = teamFilter.length === 0;
-      document.getElementById('teamFilterName').textContent = teamFilter.join(' + ');
-      applyTeamFilterStyling();
-      renderPlayerStats();
-      updateShotMap(lastShots);
-    }
-    // Clicking a team's name in the ratings row isolates the filter to just
-    // that team, or clears it if it was already isolated to that team.
-    function toggleTeamFilter(team) {
-      const idx = teamNames.indexOf(team);
-      const [checkA, checkB] = [document.getElementById('teamCheckA'), document.getElementById('teamCheckB')];
-      const isolated = teamFilter.length === 1 && teamFilter[0] === team;
-      checkA.checked = isolated ? false : idx === 0;
-      checkB.checked = isolated ? false : idx === 1;
-      applyTeamFilter();
-    }
-    function applyTeamFilterStyling() {
-      if (!teamNames) return;
-      const cardA = document.getElementById('ratingCardA');
-      const cardB = document.getElementById('ratingCardB');
-      const active = teamFilter.length > 0;
-      cardA.classList.toggle('filtered-in', teamFilter.includes(teamNames[0]));
-      cardA.classList.toggle('filtered-out', active && !teamFilter.includes(teamNames[0]));
-      cardB.classList.toggle('filtered-in', teamFilter.includes(teamNames[1]));
-      cardB.classList.toggle('filtered-out', active && !teamFilter.includes(teamNames[1]));
-    }
-
-    function updateWdl(wdl) {
-      document.getElementById('wdlHome').style.width = `${wdl.home_win_pct}%`;
-      document.getElementById('wdlDraw').style.width = `${wdl.draw_pct}%`;
-      document.getElementById('wdlAway').style.width = `${wdl.away_win_pct}%`;
-      document.getElementById('wdlHomeLabel').textContent = `${wdl.home_win_pct.toFixed(0)}% win`;
-      document.getElementById('wdlDrawLabel').textContent = `${wdl.draw_pct.toFixed(0)}% draw`;
-      document.getElementById('wdlAwayLabel').textContent = `${wdl.away_win_pct.toFixed(0)}% win`;
-    }
-
-    // Per-player pass attempts/completions -- a real running stat (every
-    // pass, not just the rare high-difficulty ones that fire a pass_quality
-    // moment), shown only in analyst mode. See run.py's record_pass().
-    function mergePassStats(playerPasses) {
-      if (!playerPasses) return;
-      for (const [player, p] of Object.entries(playerPasses)) {
-        // Focus dropdown previously only grew from players who'd triggered a
-        // confirmed overlay moment (registerPlayer in show()) -- a much
-        // smaller pool than everyone who's touched the ball. Pass data
-        // covers nearly the whole roster, so register here too.
-        registerPlayer(player);
-        const entry = playerStats.get(player) || { team: p.team, counts: {}, total: 0, lastSeen: '0:00' };
-        entry.team = p.team;
-        entry.passes = { attempts: p.attempts, completions: p.completions };
-        playerStats.set(player, entry);
-      }
-      renderPlayerStats();
-    }
-
-    // Agent Activity: every real Spotter decision (confirmed or rejected),
-    // see orchestrator.py's activity_send. Newest first, capped list.
-    let activityCount = 0;
-    function addActivity(a) {
-      activityCount++;
-      document.getElementById('activityCount').textContent =
-        `${activityCount} decision${activityCount === 1 ? '' : 's'}`;
-      const list = document.getElementById('activityList');
-      const item = document.createElement('div');
-      item.className = `activity-item ${a.confirmed ? 'confirmed' : 'rejected'}`;
-      const who = a.player ? `${a.player} · ${a.team}` : a.team;
-      item.innerHTML = `
-        <div class="activity-badge">${a.confirmed ? '✓' : '✕'}</div>
-        <div class="activity-body">
-          <div class="headline">${a.kind.replace(/_/g, ' ')}
-            <span class="meta">P${a.priority ?? '?'} · ${a.show_at}</span></div>
-          <div class="meta">${who}</div>
-          ${a.reason ? `<div class="reason">${a.reason}</div>` : ''}
-        </div>`;
-      list.insertBefore(item, list.firstChild);
-      while (list.children.length > 8) list.removeChild(list.lastChild);
-      updatePlayerStats(a);
-    }
-
-    // Player stats: moment tallies from confirmed Agent Activity entries
-    // (goal/big_chance/speed_milestone/foul/pass_quality -- control_swing
-    // and pressing_spell are team-level, nothing to tally) merged with
-    // continuous per-player pass stats from mergePassStats() above. Mode
-    // controls depth, not just overlay tone: casual/fan show the simple
-    // badge tally; analyst adds real pass attempt/completion/accuracy
-    // numbers and sorts by involvement instead of "who made the news".
-    const KIND_ICON = {
-      goal: '⚽', big_chance: '🎯', speed_milestone: '⚡', yellow: '🟨', red: '🟥',
-      pass_quality: '👟',
-    };
-    const playerStats = new Map(); // player -> { team, counts, total, lastSeen, passes? }
-    function toSeconds(clockStr) {
-      const [m, s] = clockStr.split(':').map(Number);
-      return m * 60 + s;
-    }
-    function updatePlayerStats(a) {
-      if (!a.player || !a.confirmed) return;
-      const key = a.kind === 'foul' ? (a.priority === 1 ? 'red' : 'yellow') : a.kind;
-      if (!KIND_ICON[key]) return; // team-level kinds (control_swing, pressing_spell): nothing to tally
-      const entry = playerStats.get(a.player) || { team: a.team, counts: {}, total: 0, lastSeen: a.show_at };
-      entry.team = a.team;
-      entry.lastSeen = a.show_at;
-      entry.counts[key] = (entry.counts[key] || 0) + 1;
-      entry.total += 1;
-      playerStats.set(a.player, entry);
-      renderPlayerStats();
-    }
-    const PLAYER_STATS_CAP = 6;
-    let playerStatsExpanded = false;
-    function renderPlayerStats() {
-      const focusChoice = document.getElementById('focus').value;
-      const isAnalyst = document.getElementById('mode').value === 'analyst';
-      document.getElementById('playerStatsTitle').textContent = isAnalyst ? 'Analyst stats' : 'Player stats';
-      // Casual: most-newsworthy first (moment count, recency as tiebreak).
-      // Analyst: most-involved-on-the-ball first -- a quiet, reliable
-      // passer matters here even with zero "stories".
-      let rows = [...playerStats.entries()];
-      if (teamFilter.length) rows = rows.filter(([, e]) => teamFilter.includes(e.team));
-      rows = rows.sort((x, y) => isAnalyst
-        ? ((y[1].passes?.attempts || 0) - (x[1].passes?.attempts || 0))
-        : ((y[1].total - x[1].total) || (toSeconds(y[1].lastSeen) - toSeconds(x[1].lastSeen))));
-      document.getElementById('playerStatsCount').textContent =
-        `${rows.length} player${rows.length === 1 ? '' : 's'}`;
-      // All 20+ players at once was the single biggest source of clutter for
-      // a storyline-first casual view -- show a handful there, let the
-      // viewer ask for the rest. Analyst mode wants the fuller table by
-      // default (that's the point of the mode), so skip the cap there.
-      const capped = !isAnalyst && !playerStatsExpanded && rows.length > PLAYER_STATS_CAP;
-      const shown = capped ? rows.slice(0, PLAYER_STATS_CAP) : rows;
-      const rowsHtml = shown.map(([player, e]) => {
-            const cls = `player-stat-row${player === focusChoice ? ' focused' : ''}`
-              + `${focusChoice && player !== focusChoice ? ' dimmed' : ''}`;
-            const badges = Object.entries(e.counts)
-              .map(([k, n]) => `<span title="${k}">${KIND_ICON[k]} ${n}</span>`).join('');
-            const metrics = isAnalyst ? (() => {
-              const p = e.passes || { attempts: 0, completions: 0 };
-              const acc = p.attempts ? Math.round(100 * p.completions / p.attempts) : null;
-              return `<div class="player-stat-metrics">
-                <span class="pm-passes">${p.completions}/${p.attempts}</span>
-                <span class="pm-acc">${acc != null ? acc + '%' : '—'}</span>
-              </div>`;
-            })() : '';
-            return `<div class="${cls}">
-              <div class="player-stat-name">${player}</div>
-              <div class="player-stat-team">${e.team}</div>
-              ${metrics}
-              <div class="player-stat-badges">${badges}</div>
-            </div>`;
-          }).join('');
-      const toggleHtml = (!isAnalyst && rows.length > PLAYER_STATS_CAP)
-        ? `<button class="show-all-btn" id="playerStatsToggle">${capped ? `Show all ${rows.length}` : 'Show less'}</button>`
-        : '';
-      const headerHtml = isAnalyst ? `<div class="player-stat-row header">
-          <div class="player-stat-name">Player</div><div class="player-stat-team">Team</div>
-          <div class="player-stat-metrics"><span class="pm-passes">Passes</span>
-          <span class="pm-acc">Acc.</span></div><div class="player-stat-badges"></div></div>` : '';
-      document.getElementById('playerStatsList').innerHTML = rows.length
-        ? headerHtml + rowsHtml + toggleHtml
-        : '<div class="empty-note">Nobody\'s made the news yet…</div>';
-      const toggleBtn = document.getElementById('playerStatsToggle');
-      if (toggleBtn) {
-        toggleBtn.addEventListener('click', () => {
-          playerStatsExpanded = !playerStatsExpanded;
-          renderPlayerStats();
-        });
-      }
-    }
-
-    // Local dev path (file://): the local preview server from
-    // `python -m matchhealth.run --preview`, no Azure needed.
-    // Deployed path (http/https): negotiate a short-lived Web PubSub client
-    // token from the deployed negotiate service, then connect directly.
-    const LOCAL_PREVIEW_WS = "ws://localhost:8765";
-    const NEGOTIATE_URL =
-      "https://matchhealth-negotiate.redmushroom-42fc2d2c.eastus2.azurecontainerapps.io/negotiate";
-    let lastMsg = null;
-
-    // Season-so-far context (table, form, top scorers), sent at kickoff and
-    // re-sent periodically for late joiners -- see run.py's season_msg.
+    // ---- season, table, line-ups ---------------------------------------------------
     function updateSeason(msg) {
-      const { season, fixture } = msg;
-      noteFixture(fixture);
-      if (!msg.status) showNextKickoff('live');  // a kickoff message: a new match is live
+      noteFixture(msg.fixture);
+      fixture = msg.fixture;
+      const { season } = msg;
+      $('matchweek').textContent = `Matchweek ${fixture.matchweek}`; $('matchweek').hidden = false;
+      const sp = fixture.speed;
+      $('simNote').textContent = !sp ? 'Simulated match' : sp === 1 ? 'Simulated match, real time'
+        : `Simulated match at ${sp}× speed (90 minutes in ${Math.round(90 / sp)})`;
+      $('simNote').hidden = false;
+      if (!msg.status) showNextKickoff('live');
+      $('leagueWeek').textContent = `Before today (${season.matchweek - 1} played)`;
       const live = [fixture.home, fixture.away];
-      const mw = document.getElementById('matchweek');
-      mw.textContent = `Matchweek ${fixture.matchweek}`;
-      mw.hidden = false;
-      document.getElementById('leagueWeek').textContent =
-        `after ${season.matchweek - 1} matchweek${season.matchweek === 2 ? '' : 's'}`;
-      document.getElementById('leagueBody').innerHTML = season.table.map(r => {
+      $('leagueBody').innerHTML = season.table.map(r => {
         const gd = r.gf - r.ga;
-        const form = r.form.map(f => `<span class="form-chip ${f}">${f}</span>`).join('');
-        return `<tr class="${live.includes(r.team) ? 'live' : ''}" title="${r.style}">
-          <td>${r.pos}</td><td class="team">${r.team}</td><td>${r.p}</td>
-          <td>${gd > 0 ? '+' : ''}${gd}</td>
-          <td class="adv">${r.xg_for.toFixed(1)}</td><td class="adv">${r.xg_against.toFixed(1)}</td>
-          <td><b>${r.pts}</b></td><td><span class="form-chips">${form}</span></td></tr>`;
+        return `<tr class="${live.includes(r.team) ? 'live' : ''}" title="${esc(r.style)}"><td>${r.pos}</td><td class="l club">${esc(r.team)}</td><td>${r.p}</td><td>${gd > 0 ? '+' : ''}${gd}</td><td class="adv">${r.xg_for.toFixed(1)}</td><td class="adv">${r.xg_against.toFixed(1)}</td><td><b>${r.pts}</b></td><td class="l"><span class="form">${r.form.map(f => `<i class="${f}">${f}</i>`).join('')}</span></td></tr>`;
+      }).join('');
+      renderLineups();
+    }
+    function hashOf(s) { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; }
+    function avatar(name, kit, size = 38) {
+      const h = hashOf(name), skins = ['#f1c9a5', '#8d5a3b', '#c68b5e', '#e3b48c', '#5b3a26', '#d9a27a'];
+      const hairs = ['M12.5 13c0-5 3.5-7.5 7.5-7.5s7.5 2.5 7.5 7.5c-2-2.5-5-3-7.5-3s-5.5.5-7.5 3z',
+        'M12.5 15c-1-6 3-9.5 7.5-9.5s8.5 3.5 7.5 9.5c-1-3-3-4-7.5-4s-6.5 1-7.5 4z', 'M13 12c1-4 4-6 7-6s6 2 7 6z'];
+      const hairColors = ['#1d1410', '#3b2414', '#6b4a2b', '#c9a35b'];
+      return `<svg viewBox="0 0 40 40" width="${size}" height="${size}" aria-hidden="true"><circle cx="20" cy="20" r="20" fill="#1b3530"/><path d="M5 40c1.5-9 7.5-14 15-14s13.5 5 15 14z" fill="${kit}"/><circle cx="20" cy="16" r="7.5" fill="${skins[h % 6]}"/><path d="${hairs[(h >> 3) % 3]}" fill="${hairColors[(h >> 5) % 4]}"/></svg>`;
+    }
+    function renderLineups() {
+      if (!fixture || !fixture.squads) return;
+      const subOff = new Map(), subOn = new Map();
+      subs.forEach(([min, , on, off]) => { subOn.set(on, min); subOff.set(off, min); });
+      $('lineups').innerHTML = [fixture.home, fixture.away].map((club, i) => {
+        const sq = fixture.squads[club], kit = i === 0 ? 'var(--home)' : 'var(--away)', kitHex = i === 0 ? '#f2a541' : '#7cc6f2';
+        const marks = name => {
+          const t = tallies.get(name)?.counts || {}, out = [];
+          if (t.goal) out.push(`${ICON.goal}${t.goal > 1 ? t.goal : ''}`);
+          if (t.yellow) out.push(ICON.yellow);
+          if (t.red) out.push(ICON.red);
+          if (subOff.has(name)) out.push(`${ICON.off}${subOff.get(name)}'`);
+          return `<span class="icons">${out.join(' ')}</span>`;
+        };
+        const xi = sq.xi.map(([no, name, pos]) => `<div class="lu-row ${subOff.has(name) ? 'off' : ''}">${avatar(name, kitHex)}<span class="no">${no}</span><span class="nm">${esc(name)}</span><span class="ps">${pos}</span>${marks(name)}</div>`).join('');
+        const bench = sq.bench.map(([no, name]) => `<span class="b">${avatar(name, kitHex, 28)}<span class="dim">${no}</span> ${esc(name)}${subOn.has(name) ? ` ${ICON.on}<span style="color:var(--win)">${subOn.get(name)}'</span>` : ''}</span>`).join('');
+        return `<section><div class="lu-head"><h3 style="color:${kit}">${esc(club)}</h3></div>${xi}<div class="dim" style="font-weight:700;margin-top:14px">Substitutes</div><div class="bench">${bench}</div></section>`;
       }).join('');
     }
 
-    // Narrator agent output: one item per storyline set / checkpoint /
-    // recap, each holding every persona's version ("<mode>-<lang>"). Model
-    // text goes in via textContent, never innerHTML.
-    const narratives = new Map();
-    const STORY_WHEN = { pre_match: 'Before kick-off', checkpoint: null, recap: 'Full time' };
-    function addNarrative(item) {
-      narratives.set(item.id, item);
-      renderStory();
-    }
-    function renderStory() {
-      const mode = document.getElementById('mode').value;
-      const lang = document.getElementById('lang').value;
-      const list = document.getElementById('storyList');
-      if (!narratives.size) return;
-      list.replaceChildren();
-      for (const item of [...narratives.values()].reverse()) {
-        const v = item.variants[`${mode}-${lang}`] || item.variants[`${mode}-en`]
-          || Object.values(item.variants)[0];
-        const el = document.createElement('div');
-        el.className = `story-item ${item.kind === 'recap' ? 'recap' : ''}`;
-        const when = document.createElement('div');
-        when.className = 'when';
-        when.textContent = STORY_WHEN[item.kind] || item.show_at;
-        const h = document.createElement('h3');
-        h.textContent = v.title;
-        el.append(when, h, ...v.lines.map(line => {
-          const p = document.createElement('p'); p.textContent = line; return p;
-        }));
-        list.appendChild(el);
+    // ---- player stats ----------------------------------------------------------------
+    let statsExpanded = false;
+    function renderStats() {
+      const analyst = mode() === 'analyst', f = $('focus').value;
+      $('statsTitle').textContent = analyst ? 'Passing' : 'Player stats';
+      let rows = analyst
+        ? Object.entries(players).map(([n, p]) => [n, p]).sort((x, y) => y[1].attempts - x[1].attempts)
+        : [...tallies.entries()].sort((x, y) => y[1].total - x[1].total || toSeconds(y[1].last) - toSeconds(x[1].last));
+      if (teamFilter.length) rows = rows.filter(([, e]) => teamFilter.includes(e.team));
+      $('statsCount').textContent = analyst ? 'Sorted by passes attempted' : `${rows.length} players made the news`;
+      const capped = !analyst && !statsExpanded && rows.length > 6;
+      const shown = capped ? rows.slice(0, 6) : rows;
+      const cls = n => `${n === f ? 'focused' : ''} ${f && n !== f ? 'dimmed' : ''}`;
+      const club = t => `<span class="club-dot" style="background:var(${teamNames && t === teamNames[0] ? '--home' : '--away'})"></span>${esc(t)}`;
+      if (!rows.length) { $('statsTable').innerHTML = `<tr><td class="l empty">${analyst ? 'Passing numbers arrive with the first ticks.' : 'Nobody has made the news yet.'}</td></tr>`; }
+      else if (analyst) {
+        $('statsTable').innerHTML = `<thead><tr><th class="l">Player</th><th class="l">Club</th><th>Passes</th><th>Acc.</th><th class="l">Accuracy</th><th>Prog.</th><th>Under press.</th></tr></thead><tbody>` +
+          shown.map(([n, p]) => {
+            const acc = p.attempts ? Math.round(100 * p.completions / p.attempts) : 0;
+            const pr = p.pressured_att ? `${Math.round(100 * p.pressured_comp / p.pressured_att)}%` : '–';
+            const col = teamNames && p.team === teamNames[0] ? 'var(--home)' : 'var(--away)';
+            return `<tr class="${cls(n)}"><td class="l"><b>${esc(n)}</b></td><td class="l dim">${club(p.team)}</td><td>${p.completions}/${p.attempts}</td><td><b>${acc}%</b></td><td class="l"><div class="bar"><div style="width:${acc}%;background:${col}"></div></div></td><td>${p.progressive}</td><td>${pr}</td></tr>`;
+          }).join('') + '</tbody>';
+      } else {
+        $('statsTable').innerHTML = '<tbody>' + shown.map(([n, e]) => `<tr class="${cls(n)}"><td class="l"><b>${esc(n)}</b></td><td class="l dim">${club(e.team)}</td><td><span class="icons">${Object.entries(e.counts).map(([k, c]) => `${ICON[k] || ''}${c > 1 ? c : ''}`).join(' ')}</span></td></tr>`).join('') + '</tbody>';
       }
-      document.getElementById('storyCount').textContent =
-        `${narratives.size} update${narratives.size === 1 ? '' : 's'}`;
+      const t = $('statsToggle');
+      t.hidden = analyst || rows.length <= 6;
+      t.textContent = capped ? `Show all ${rows.length}` : 'Show fewer';
+    }
+    $('statsToggle').addEventListener('click', () => { statsExpanded = !statsExpanded; renderStats(); });
+
+    // ---- activity + tallies -------------------------------------------------------------
+    function addActivity(a) {
+      if (a.x != null) momentLoc.set(a.moment_id, { x: a.x, y: a.y });
+      activityCount++;
+      $('activityCount').textContent = `${activityCount} decision${activityCount === 1 ? '' : 's'}`;
+      const item = document.createElement('div');
+      item.className = `act ${a.confirmed ? 'ok' : 'no'}`;
+      item.innerHTML = `<div class="b">${a.confirmed ? '✓' : '✕'}</div><div><div><span class="h">${esc(KIND_LABEL[a.kind] || a.kind)}</span> <span class="m">P${a.priority ?? '?'}, ${esc(a.show_at)}</span></div><div class="m">${esc(a.player ? `${a.player}, ${a.team}` : a.team)}</div>${a.reason ? `<div class="r">${esc(a.reason)}</div>` : ''}</div>`;
+      const list = $('activityList');
+      list.insertBefore(item, list.firstChild);
+      while (list.children.length > 20) list.removeChild(list.lastChild);
+      if (a.player && a.confirmed) {
+        const key = a.kind === 'foul' ? (a.priority === 1 ? 'red' : 'yellow') : a.kind;
+        if (ICON[key]) {
+          const e = tallies.get(a.player) || { team: a.team, counts: {}, total: 0, last: a.show_at };
+          e.counts[key] = (e.counts[key] || 0) + 1; e.total++; e.last = a.show_at;
+          tallies.set(a.player, e);
+          registerPlayer(a.player);
+          renderStats(); renderLineups();
+        }
+      }
+    }
+    function registerPlayer(name) {
+      if (!name || seenPlayers.has(name)) return;
+      seenPlayers.add(name);
+      const o = document.createElement('option'); o.value = name; o.textContent = name;
+      $('focus').appendChild(o);
     }
 
-    // Catch-up snapshot (run.py's send_catchup): everything so far, so a
-    // viewer who opens the page mid-match or after full time sees it all.
-    let currentFixture = null;
-    function fixtureKey(f) { return `${f.matchweek}:${f.home}:${f.away}`; }
-    function resetForNewMatch() {
-      teamNames = null; lastHealth = null; lastMsg = null;
-      pulse = []; pulseGoals = []; lastScore = null;
-      narratives.clear(); playerStats.clear(); activityCount = 0;
-      seenPlayers.clear();  // the Focus list too, or old squads pile up in it
-      const focus = document.getElementById('focus');
-      while (focus.options.length > 1) focus.remove(1);
-      document.getElementById('activityList').replaceChildren();
-      document.getElementById('storyList').replaceChildren();
-      document.getElementById('activityCount').textContent = '0 decisions';
+    // ---- story ------------------------------------------------------------------------
+    const STORY_WHEN = { pre_match: 'Before', recap: 'FT' };
+    function renderStory() {
+      if (!narratives.size) return;
+      const items = [...narratives.values()].reverse();
+      $('storyList').innerHTML = items.map((item, i) => {
+        const v = item.variants[`${mode()}-${lang()}`] || item.variants[`${mode()}-en`] || Object.values(item.variants)[0];
+        const when = STORY_WHEN[item.kind] || (item.label === 'Half-time' ? 'HT' : item.label);
+        const cls = item.kind === 'recap' ? 'recap' : (i > 1 ? 'older' : '');
+        return `<div class="when ${item.kind === 'pre_match' ? 'quiet' : ''}">${esc(when)}</div><div class="body ${cls}"><h3>${esc(v.title)}</h3>${v.lines.map(l => `<p>${esc(l)}</p>`).join('')}</div>`;
+      }).join('');
+      $('storyCount').textContent = `${narratives.size} update${narratives.size === 1 ? '' : 's'} from the Narrator`;
     }
-    function noteFixture(fixture) {
-      const key = fixtureKey(fixture);
+
+    // ---- charts (analyst) -------------------------------------------------------------
+    const CHARTS = [
+      ['xg', 'xG race', 'Who deserved to win? Each step is a shot, its height the chance quality; rings are goals. Lines crossing means the balance of chances flipped.'],
+      ['wp', 'Win probability', 'The match as a story of odds. Big jumps are the moments that mattered.'],
+      ['ppda', 'Pressing', 'Passes the opponent completes per defensive action (tackle, pressure, foul), per 15 minutes. Lower bars mean a fiercer press.'],
+      ['tilt', 'Field tilt', 'Share of final-third passes per 15 minutes. Possession can lie; field tilt shows who is camped in the other half.'],
+      ['zones', 'Zones', 'Where a team touched the ball, attacking left to right. Brighter zones saw more of the ball.'],
+      ['profile', 'Player profile', 'The followed player against everyone on the pitch today, as percentiles. Long bars are what stands out.'],
+      ['hard', 'Hard passes', 'Average pass difficulty against completion rate. Top right is rare: players who try hard passes and still find a teammate.'],
+      ['shots', 'Shot map', 'Every shot, both teams attacking the top goal. Bigger dot, better chance; gold is a goal.'],
+    ];
+    let chart = 'xg', zoneTeam = 0;
+    $('chartTabs').innerHTML = CHARTS.map(([id, label]) => `<button type="button" role="tab" data-chart="${id}" aria-selected="${id === chart}">${label}</button>`).join('');
+    $('chartTabs').addEventListener('click', e => {
+      const b = e.target.closest('[data-chart]'); if (!b) return;
+      chart = b.dataset.chart;
+      document.querySelectorAll('[data-chart]').forEach(x => x.setAttribute('aria-selected', String(x === b)));
+      renderChart();
+    });
+    $('chartView').addEventListener('click', e => {
+      const b = e.target.closest('[data-zone]'); if (!b) return;
+      zoneTeam = Number(b.dataset.zone); renderChart();
+    });
+    const C = i => i === 0 ? '#f2a541' : '#7cc6f2';
+    const legend = () => teamNames ? `<div class="legend"><span><i style="background:${C(0)}"></i>${esc(teamNames[0])}</span><span><i style="background:${C(1)}"></i>${esc(teamNames[1])}</span></div>` : '';
+    const minAxis = (y, w = 560, l = 40) => `<text class="ax" x="${l}" y="${y}">0'</text><text class="ax" x="${(l + w) / 2}" y="${y}" text-anchor="middle">45'</text><text class="ax" x="${w}" y="${y}" text-anchor="end">90'</text>`;
+    function renderChart() {
+      const how = CHARTS.find(c => c[0] === chart);
+      $('chartHow').textContent = how[2];
+      const v = $('chartView');
+      if (!teamNames) { v.innerHTML = '<p class="empty">Charts fill in once the match starts.</p>'; return; }
+      v.innerHTML = ({ xg: chartXg, wp: chartWp, ppda: () => chartBuckets('ppda'), tilt: chartTilt, zones: chartZones,
+        profile: chartProfile, hard: chartHard, shots: chartShots })[chart]();
+    }
+    function chartXg() {
+      const X = m => 40 + Math.min(m, 90) / 90 * 520, max = Math.max(1, ...teamNames.map(n => lastShots.filter(s => s.team === n).reduce((a, s) => a + (s.xg || 0), 0)));
+      const Y = v => 190 - v / max * 170;
+      const lines = teamNames.map((n, i) => {
+        let cum = 0, d = `M40,190`, dots = '';
+        lastShots.filter(s => s.team === n).sort((a, b) => a.t - b.t).forEach(s => {
+          const x = X(s.t / 60); d += ` H${x.toFixed(1)}`; cum += s.xg || 0; d += ` V${Y(cum).toFixed(1)}`;
+          if (s.is_goal) dots += `<circle cx="${x.toFixed(1)}" cy="${Y(cum).toFixed(1)}" r="6" fill="${C(i)}" stroke="#11231f" stroke-width="2"><title>Goal, ${esc(s.player || n)}</title></circle>`;
+        });
+        const now = X(pulse.length ? pulse[pulse.length - 1].min : 0);
+        return `<path d="${d} H${now.toFixed(1)}" fill="none" stroke="${C(i)}" stroke-width="3"/>${dots}<text class="ax" x="${(now + 4).toFixed(1)}" y="${(Y(cum) + 4).toFixed(1)}" fill="${C(i)}">${cum.toFixed(2)}</text>`;
+      }).join('');
+      return `<svg viewBox="0 0 600 215" role="img" aria-label="Cumulative expected goals for both teams"><g stroke="rgba(238,241,232,.1)"><line x1="40" y1="190" x2="560" y2="190"/><line x1="40" y1="${Y(max / 2)}" x2="560" y2="${Y(max / 2)}"/></g><text class="ax" x="34" y="194" text-anchor="end">0</text><text class="ax" x="34" y="${Y(max / 2) + 4}" text-anchor="end">${(max / 2).toFixed(1)}</text>${lines}${minAxis(210)}</svg>${legend()}`;
+    }
+    function chartWp() {
+      const pts = pulse.filter(p => p.hw != null);
+      if (pts.length < 2) return '<p class="empty">Building up: needs a few minutes of play.</p>';
+      const X = m => 40 + Math.min(m, 90) / 90 * 520, Y = v => 190 - v / 100 * 180;
+      const top = pts.map(p => `${X(p.min).toFixed(1)},${Y(p.hw).toFixed(1)}`), mid = pts.map(p => `${X(p.min).toFixed(1)},${Y(p.hw + p.d).toFixed(1)}`);
+      const x0 = X(pts[0].min).toFixed(1), x1 = X(pts[pts.length - 1].min).toFixed(1);
+      return `<svg viewBox="0 0 600 215" role="img" aria-label="Win, draw and loss probability over the match">
+        <path d="M${x0},190 L${top.join(' L')} L${x1},190 Z" fill="rgba(242,165,65,.75)"/>
+        <path d="M${top.join(' L')} L${mid.slice().reverse().join(' L')} Z" fill="rgba(143,163,156,.6)"/>
+        <path d="M${mid.join(' L')} L${x1},10 L${x0},10 Z" fill="rgba(124,198,242,.7)"/>
+        ${pulseGoals.map(g => `<line x1="${X(g.min)}" y1="10" x2="${X(g.min)}" y2="190" stroke="#0b1916" stroke-width="2" stroke-dasharray="3 3"/>`).join('')}
+        ${minAxis(210)}</svg><div class="legend"><span><i style="background:${C(0)}"></i>${esc(teamNames[0])} win</span><span><i style="background:#8fa39c"></i>Draw</span><span><i style="background:${C(1)}"></i>${esc(teamNames[1])} win</span><span>Dashed lines: goals</span></div>`;
+    }
+    function chartBuckets(key) {
+      if (!analytics) return '<p class="empty">Arrives with the next update.</p>';
+      const data = teamNames.map(n => analytics[key][n]), max = Math.max(1, ...data.flat().filter(v => v != null));
+      const labels = ['0-15', '15-30', '30-45', '45-60', '60-75', '75-90'];
+      const bars = labels.map((lab, b) => data.map((vals, i) => {
+        const v = vals[b]; if (v == null) return '';
+        const h = v / max * 160, x = 50 + b * 85 + i * 32;
+        return `<rect x="${x}" y="${190 - h}" width="28" height="${h}" fill="${C(i)}"><title>${esc(teamNames[i])} ${lab}: ${v}</title></rect><text class="ax" x="${x + 14}" y="${184 - h}" text-anchor="middle">${v}</text>`;
+      }).join('') + `<text class="ax" x="${50 + b * 85 + 30}" y="208" text-anchor="middle">${lab}'</text>`).join('');
+      return `<svg viewBox="0 0 580 215" role="img" aria-label="${key} per 15-minute block for both teams"><line x1="40" y1="190" x2="560" y2="190" stroke="rgba(238,241,232,.15)"/>${bars}</svg>${legend()}`;
+    }
+    function chartTilt() {
+      if (!analytics) return '<p class="empty">Arrives with the next update.</p>';
+      const t = analytics.tilt[teamNames[0]], labels = ['0-15', '15-30', '30-45', '45-60', '60-75', '75-90'];
+      const rows = labels.map((lab, b) => {
+        const v = t[b]; if (v == null) return '';
+        const d = (v - 50) * 4.2, y = 22 + b * 30;
+        return `<text class="ax" x="36" y="${y + 14}">${lab}'</text><rect x="${d >= 0 ? 300 : 300 + d}" y="${y}" width="${Math.abs(d)}" height="20" fill="${d >= 0 ? C(0) : C(1)}"><title>${v}% of final-third passes: ${esc(teamNames[0])}</title></rect><text class="ax" x="${d >= 0 ? 306 + d : 294 + d}" y="${y + 14}" text-anchor="${d >= 0 ? 'start' : 'end'}">${d >= 0 ? v : 100 - v}%</text>`;
+      }).join('');
+      return `<svg viewBox="0 0 600 210" role="img" aria-label="Field tilt per 15 minutes"><line x1="300" y1="14" x2="300" y2="204" stroke="rgba(238,241,232,.3)"/><text class="ax" x="150" y="12" text-anchor="middle">${esc(teamNames[1])} on top</text><text class="ax" x="450" y="12" text-anchor="middle">${esc(teamNames[0])} on top</text>${rows}</svg>`;
+    }
+    function chartZones() {
+      if (!analytics) return '<p class="empty">Arrives with the next update.</p>';
+      const z = analytics.zones[teamNames[zoneTeam]], max = Math.max(1, ...z), total = z.reduce((a, b) => a + b, 0) || 1;
+      const rgb = zoneTeam === 0 ? '242,165,65' : '124,198,242';
+      const cells = z.map((v, i) => { const c = i % 6, r = Math.floor(i / 6);
+        return `<rect x="${10 + c * 95}" y="${10 + r * 80}" width="93" height="78" fill="rgba(${rgb},${(0.08 + 0.85 * v / max).toFixed(2)})"/><text x="${56 + c * 95}" y="${54 + r * 80}" text-anchor="middle" font-size="15" font-weight="800" fill="${v / max > 0.55 ? '#0b1916' : '#eef1e8'}" font-family="Archivo,sans-serif">${Math.round(100 * v / total)}%</text>`; }).join('');
+      return `<div class="sub-tabs">${teamNames.map((n, i) => `<button type="button" data-zone="${i}" aria-pressed="${i === zoneTeam}">${esc(n)}</button>`).join('')}</div>
+        <svg viewBox="0 0 590 262" role="img" aria-label="Share of touches by pitch zone"><rect x="8" y="8" width="574" height="244" fill="none" stroke="rgba(238,241,232,.2)"/>${cells}<text class="ax" x="580" y="258" text-anchor="end">Attacking this way →</text></svg>`;
+    }
+    function chartProfile() {
+      const name = $('focus').value || Object.entries(players).sort((a, b) => b[1].attempts - a[1].attempts)[0]?.[0];
+      const p = players[name];
+      if (!p) return '<p class="empty">Follow a player to see their profile.</p>';
+      const pool = Object.values(players).filter(q => q.attempts >= 5);
+      const metrics = [['Passes completed', q => q.completions], ['Pass accuracy', q => q.attempts ? q.completions / q.attempts : 0],
+        ['Accuracy under pressure', q => q.pressured_att ? q.pressured_comp / q.pressured_att : 0], ['Progressive passes', q => q.progressive],
+        ['Tackles won', q => q.tackles], ['Shot quality (xG)', q => q.xg]];
+      const pct = (f) => Math.round(100 * pool.filter(q => f(q) <= f(p)).length / Math.max(1, pool.length));
+      const col = teamNames && p.team === teamNames[0] ? 'var(--home)' : 'var(--away)';
+      return `<div style="font-size:1.1rem;font-weight:800;margin-bottom:6px">${esc(name)} <span class="dim" style="font-weight:500;font-size:.95rem">${esc(p.team)}</span></div>` +
+        metrics.map(([label, f]) => { const v = pct(f); return `<div class="pct-row"><span>${label}</span><div class="pct-track"><div class="pct-fill" style="width:${v}%;background:${col}"></div></div><b style="text-align:right">${v}</b></div>`; }).join('') +
+        `<p class="dim" style="margin:8px 0 0;font-size:.85rem">Percentile among the ${pool.length} players with 5+ passes today. Follow another player to compare.</p>`;
+    }
+    function chartHard() {
+      const pts = Object.entries(players).filter(([, p]) => p.attempts >= 10 && p.difficulty != null);
+      if (!pts.length) return '<p class="empty">Needs a few more passes.</p>';
+      const ds = pts.map(([, p]) => p.difficulty), lo = Math.min(...ds), hi = Math.max(...ds, lo + 0.01);
+      const X = d => 60 + (d - lo) / (hi - lo) * 480, Y = c => 200 - (c - 0.5) / 0.5 * 180;
+      const f = $('focus').value;
+      const dots = pts.map(([n, p]) => { const c = p.completions / p.attempts, i = p.team === teamNames[0] ? 0 : 1;
+        return `<circle cx="${X(p.difficulty).toFixed(1)}" cy="${Y(Math.max(.5, c)).toFixed(1)}" r="${n === f ? 9 : 6}" fill="${C(i)}" ${n === f ? 'stroke="#c9f27c" stroke-width="3"' : ''}><title>${esc(n)}: difficulty ${p.difficulty}, ${Math.round(100 * c)}% completed</title></circle>${n === f ? `<text x="${X(p.difficulty) + 12}" y="${Y(c) + 4}" fill="#eef1e8" font-size="13" font-weight="800" font-family="Archivo,sans-serif">${esc(n)}</text>` : ''}`; }).join('');
+      return `<svg viewBox="0 0 580 235" role="img" aria-label="Players by pass difficulty and completion"><line x1="60" y1="200" x2="560" y2="200" stroke="rgba(238,241,232,.2)"/><line x1="60" y1="20" x2="60" y2="200" stroke="rgba(238,241,232,.2)"/><text class="ax" x="310" y="228" text-anchor="middle">Harder passes →</text><text class="ax" x="54" y="24" text-anchor="end">100%</text><text class="ax" x="54" y="200" text-anchor="end">50%</text>${dots}</svg>${legend()}<p class="dim" style="margin:6px 0 0;font-size:.85rem">Hover a dot for the player. Follow someone to highlight them.</p>`;
+    }
+    function chartShots() {
+      const shots = teamFilter.length ? lastShots.filter(s => teamFilter.includes(s.team)) : lastShots;
+      const dots = shots.map(s => { const i = s.team === teamNames[0] ? 0 : 1, r = (0.6 + (s.xg || 0) * 1.6).toFixed(2);
+        const fill = s.is_goal ? '#f2c641' : C(i), op = s.is_goal ? 1 : s.outcome === 'on_target' ? .75 : .3;
+        return `<circle cx="${s.y}" cy="${(105 - s.display_x).toFixed(1)}" r="${r}" fill="${fill}" fill-opacity="${op}" stroke="${fill}" stroke-width=".25"><title>${esc(s.player || s.team)}: ${s.is_goal ? 'goal' : s.outcome.replace('_', ' ')}, xG ${(s.xg || 0).toFixed(2)}</title></circle>`; }).join('');
+      return `<svg viewBox="0 0 68 34" role="img" aria-label="Shot locations, both teams attacking the top goal"><rect width="68" height="34" fill="rgba(238,241,232,.04)" stroke="rgba(238,241,232,.2)" stroke-width=".3"/><rect x="13.85" y="0" width="40.3" height="16.5" fill="none" stroke="rgba(238,241,232,.2)" stroke-width=".25"/><rect x="24.84" y="0" width="18.32" height="5.5" fill="none" stroke="rgba(238,241,232,.2)" stroke-width=".25"/><line x1="30.34" y1=".3" x2="37.66" y2=".3" stroke="#fff" stroke-width=".6"/>${dots}</svg>${legend()}`;
+    }
+
+    // ---- team filter (analyst) ------------------------------------------------------------
+    function applyTeamFilter() {
+      if (!teamNames) return;
+      const c = [];
+      if ($('teamCheckA').checked) c.push(teamNames[0]);
+      if ($('teamCheckB').checked) c.push(teamNames[1]);
+      teamFilter = c.length === 0 || c.length === 2 ? [] : c;
+      renderStats(); if (mode() === 'analyst') renderChart();
+    }
+    $('teamCheckA').addEventListener('change', applyTeamFilter);
+    $('teamCheckB').addEventListener('change', applyTeamFilter);
+
+    // ---- catch-up, new matches, kickoff countdown --------------------------------------------
+    let currentFixture = null, kickoffTimer = null;
+    const fixtureKey = f => `${f.matchweek}:${f.home}:${f.away}`;
+    function noteFixture(f) {
+      const key = fixtureKey(f);
       if (currentFixture && currentFixture !== key) resetForNewMatch();
       currentFixture = key;
     }
-    let kickoffTimer = null;
-    function showNextKickoff(status, seconds) {
-      const el = document.getElementById('nextKickoff');
+    function resetForNewMatch() {
+      teamNames = null; lastHealth = null; lastMsg = null; fixture = null; lastShots = []; analytics = null;
+      players = {}; subs = []; pulse = []; pulseGoals = []; lastScore = null; activityCount = 0;
+      narratives.clear(); seenPlayers.clear(); momentLoc.clear(); tallies.clear(); trail = [];
+      trailLine.setAttribute('points', '');
+      $('activityList').innerHTML = ''; $('activityCount').textContent = '0 decisions';
+      $('storyList').innerHTML = '<div></div><div class="empty">Storylines arrive before kick-off.</div>';
+      const f = $('focus'); while (f.options.length > 1) f.remove(1);
+    }
+    function showNextKickoff(status, secs) {
+      const el = $('nextKickoff');
       clearInterval(kickoffTimer);
       if (status !== 'full_time') { el.hidden = true; return; }
       el.hidden = false;
-      if (seconds == null) { el.textContent = 'Full time'; return; }
-      const end = Date.now() + seconds * 1000;
-      const tick = () => {
-        const left = Math.max(0, Math.round((end - Date.now()) / 1000));
-        el.textContent = left > 0
-          ? `Full time. Next match in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`
-          : 'Next match starting';
-      };
-      tick();
-      kickoffTimer = setInterval(tick, 1000);
+      if (secs == null) { el.textContent = 'Full time'; return; }
+      const end = Date.now() + secs * 1000;
+      const tick = () => { const left = Math.max(0, Math.round((end - Date.now()) / 1000));
+        el.textContent = left ? `Full time. Next match in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : 'Next match starting'; };
+      tick(); kickoffTimer = setInterval(tick, 1000);
     }
     function applyCatchup(c) {
-      noteFixture(c.fixture);
       updateSeason(c);
       if (c.health) updateHealth(c.health);
       if (c.pulse && teamNames && c.pulse.length >= pulse.length) {
-        pulse = c.pulse.map(([min, a, b]) => ({ min, a, b }));
+        pulse = c.pulse.map(([min, a, b, hw, d, aw]) => ({ min, a, b, hw, d, aw }));
         pulseGoals = c.goals.map(([min, team]) => ({ min, team }));
         drawPulse();
       }
       c.narratives.forEach(n => narratives.set(n.id, n));
       renderStory();
-      if (c.last_overlay && !lastMsg) { lastMsg = c.last_overlay; }
+      if (c.last_overlay && !lastMsg) lastMsg = c.last_overlay;
       showNextKickoff(c.status, c.next_kickoff_in_s);
+      if (mode() === 'analyst') renderChart();
     }
+
+    function toSeconds(s) { const [m, sec] = String(s).split(':').map(Number); return m * 60 + (sec || 0); }
+    function rerenderAll() {
+      renderStory(); renderStats(); renderMetricPin(); renderLineups();
+      if (mode() === 'analyst') renderChart();
+      if (lastMsg) show(lastMsg, false);
+    }
+    for (const id of ['lang', 'focus', 'metric']) $(id).addEventListener('change', rerenderAll);
 
     function onMessage(raw) {
       const msg = JSON.parse(raw);
-      if (msg.catchup) { applyCatchup(msg.catchup); return; }
-      if (msg.narrative) { addNarrative(msg.narrative); return; }
-      if (msg.narratives) { msg.narratives.forEach(n => narratives.set(n.id, n)); renderStory(); return; }
-      if (msg.season) { updateSeason(msg); return; }
-      if (msg.teams) { updateHealth(msg); return; }
-      if (msg.kind) { addActivity(msg); return; }
+      if (msg.catchup) return applyCatchup(msg.catchup);
+      if (msg.narrative) { narratives.set(msg.narrative.id, msg.narrative); return renderStory(); }
+      if (msg.narratives) { msg.narratives.forEach(n => narratives.set(n.id, n)); return renderStory(); }
+      if (msg.season) return updateSeason(msg);
+      if (msg.teams) return updateHealth(msg);
+      if (msg.kind) return addActivity(msg);
       if (msg.base) { lastMsg = msg; show(msg); }
     }
 
+    // ---- connection --------------------------------------------------------------------------
+    // file:// or ?local: the local preview server (python -m matchhealth.run --preview).
+    // Otherwise: a short-lived Web PubSub token from the deployed negotiate service.
+    const LOCAL_PREVIEW_WS = 'ws://localhost:8765';
+    const NEGOTIATE_URL = 'https://matchhealth-negotiate.redmushroom-42fc2d2c.eastus2.azurecontainerapps.io/negotiate';
+    const params = new URLSearchParams(location.search);
+    const FORCE_LOCAL = params.has('local');
     function openSocket(url) {
       const ws = new WebSocket(url);
-      ws.onopen = () => console.log("connected:", url);
-      ws.onmessage = (ev) => onMessage(ev.data);
-      ws.onerror = () => console.warn("socket error, will retry:", url);
+      ws.onmessage = ev => onMessage(ev.data);
       ws.onclose = () => setTimeout(connect, 1500);
     }
-
-    // ?autopilot walks the real UI through the demo-video scenes on a timer
-    // (casual -> tables -> analyst -> Deutsch -> player focus -> pinned metric
-    // -> back), looping, and brings the recap into view at full time.
-    if (new URLSearchParams(location.search).has("autopilot")) {
-      document.documentElement.style.scrollbarWidth = "none";  // clean frames for recording
-      const set = (id, value) => {
-        const el = document.getElementById(id);
-        if (value === undefined) value = el.options[Math.min(1, el.options.length - 1)].value;
-        el.value = value; el.dispatchEvent(new Event("change"));
-      };
-      const to = sel => document.querySelector(sel).scrollIntoView({ behavior: "smooth", block: "start" });
-      const SCENES = [
-        [0, () => { set("mode", "casual"); set("lang", "en"); set("focus", ""); set("metric", ""); scrollTo({ top: 0, behavior: "smooth" }); }],
-        [45, () => to(".league-panel")],
-        [55, () => scrollTo({ top: 0, behavior: "smooth" })],
-        [62, () => set("mode", "analyst")],
-        [72, () => set("lang", "de")],
-        [82, () => set("focus")],
-        [88, () => set("metric", "player_passing")],
-        [98, () => set("metric", "win_prob")],
-        [106, () => to(".league-panel")],
-        [116, () => { set("lang", "fr"); scrollTo({ top: 0, behavior: "smooth" }); }],
-        [124, () => { set("lang", "en"); set("mode", "casual"); set("focus", ""); set("metric", ""); }],
-      ];
-      const LOOP_S = 130;
-      let start = null, done = new Set(), loop = 0;
-      setInterval(() => {
-        if (!teamNames) return;
-        start ??= Date.now();
-        const t = (Date.now() - start) / 1000 - loop * LOOP_S;
-        if (t >= LOOP_S) { loop++; done = new Set(); return; }
-        SCENES.forEach(([at, fn], i) => { if (t >= at && !done.has(i)) { done.add(i); fn(); } });
-        if (narratives.has("n-recap") && !done.has("recap")) {
-          done.add("recap"); set("mode", "casual"); set("lang", "en"); to(".story-panel");
-        }
-      }, 500);
-    }
-
-    // ?local forces the local preview socket even when served over http
-    // (e.g. a localhost server for recording), instead of the live Azure feed.
-    const FORCE_LOCAL = new URLSearchParams(location.search).has("local");
     async function connect() {
-      if (location.protocol !== "file:" && !FORCE_LOCAL) {
-        try {
-          const res = await fetch(NEGOTIATE_URL);
-          const { url } = await res.json();
-          openSocket(url);
-          return;
-        } catch (e) {
-          console.warn("negotiate failed, retrying in 1.5s:", e);
-          setTimeout(connect, 1500);
-          return;
-        }
+      if (location.protocol !== 'file:' && !FORCE_LOCAL) {
+        try { const { url } = await (await fetch(NEGOTIATE_URL)).json(); return openSocket(url); }
+        catch (e) { return setTimeout(connect, 1500); }
       }
       openSocket(LOCAL_PREVIEW_WS);
     }
     connect();
+    renderChart();
 
-    // Casual and Analyst are genuinely different views (brief-driven: casual
-    // = storyline-first pitch, analyst = stats-dense hero), not just a
-    // content swap inside the same layout -- this attribute drives the CSS
-    // that reshapes .main-grid, panel sizing and number emphasis below.
-    function applyModeLayout() {
-      document.body.dataset.mode = document.getElementById('mode').value;
+    // ---- ?autopilot: walks the real UI through the demo-video scenes ---------------------------
+    if (params.has('autopilot')) {
+      document.documentElement.style.scrollbarWidth = 'none';
+      const set = (id, value) => { const el = $(id); el.value = value ?? el.options[Math.min(1, el.options.length - 1)].value; el.dispatchEvent(new Event('change')); };
+      const tab = id => document.querySelector(`[data-chart="${id}"]`)?.click();
+      const to = sel => document.querySelector(sel)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const top = () => scrollTo({ top: 0, behavior: 'smooth' });
+      const SCENES = [
+        [0, () => { setMode('casual'); set('lang', 'en'); set('focus', ''); set('metric', ''); top(); }],
+        [40, () => to('.p-lineups')], [52, () => top()],
+        [60, () => { setMode('analyst'); tab('xg'); }], [72, () => tab('wp')], [82, () => tab('ppda')],
+        [92, () => { set('focus'); tab('profile'); }], [104, () => { set('metric', 'player_passing'); tab('zones'); }],
+        [114, () => tab('hard')], [124, () => { set('lang', 'de'); to('.p-stats'); }],
+        [136, () => { top(); set('lang', 'en'); tab('shots'); }],
+        [146, () => { setMode('casual'); set('focus', ''); set('metric', ''); }],
+      ];
+      const LOOP = 160;
+      let start = null, done = new Set(), loop = 0, finished = false;
+      setInterval(() => {
+        if (!teamNames || finished) return;
+        if (narratives.has('n-recap')) { finished = true; setMode('casual'); set('lang', 'en'); set('focus', ''); set('metric', ''); setTimeout(() => to('.p-story'), 600); return; }
+        start ??= Date.now();
+        const t = (Date.now() - start) / 1000 - loop * LOOP;
+        if (t >= LOOP) { loop++; done = new Set(); return; }
+        SCENES.forEach(([at, fn], i) => { if (t >= at && !done.has(i)) { done.add(i); fn(); } });
+      }, 500);
     }
-    applyModeLayout();
-    document.getElementById('mode').addEventListener('change', applyModeLayout);
-    document.getElementById('mode').addEventListener('change', renderPlayerStats);
-    document.getElementById('focus').addEventListener('change', renderPlayerStats);
-    document.getElementById('focus').addEventListener('change', renderMetricPin);
-    document.getElementById('metric').addEventListener('change', renderMetricPin);
-    document.getElementById('mode').addEventListener('change', renderStory);
-    document.getElementById('lang').addEventListener('change', renderStory);
-    for (const id of ['mode', 'lang', 'focus']) {
-      document.getElementById(id).addEventListener('change', () => lastMsg && show(lastMsg));
-    }
-
-    document.getElementById('ratingNameA').addEventListener('click', () => teamNames && toggleTeamFilter(teamNames[0]));
-    document.getElementById('ratingNameB').addEventListener('click', () => teamNames && toggleTeamFilter(teamNames[1]));
-    document.getElementById('ratingNameA').addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); teamNames && toggleTeamFilter(teamNames[0]); }
-    });
-    document.getElementById('ratingNameB').addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); teamNames && toggleTeamFilter(teamNames[1]); }
-    });
-    document.getElementById('teamFilterClear').addEventListener('click', () => {
-      document.getElementById('teamCheckA').checked = false;
-      document.getElementById('teamCheckB').checked = false;
-      applyTeamFilter();
-    });
-    document.getElementById('teamCheckA').addEventListener('change', applyTeamFilter);
-    document.getElementById('teamCheckB').addEventListener('change', applyTeamFilter);
   </script>
 </body>
 </html>

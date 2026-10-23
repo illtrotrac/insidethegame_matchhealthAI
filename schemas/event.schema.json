@@ -6,7 +6,7 @@
   "properties": {
     "id": {"type": "integer"},
     "t": {"type": "number", "description": "Seconds since kick-off"},
-    "type": {"enum": ["kickoff", "pass", "shot", "tackle", "pressure", "possession_change", "foul", "goal", "half_time", "full_time"]},
+    "type": {"enum": ["kickoff", "pass", "shot", "tackle", "pressure", "possession_change", "foul", "goal", "half_time", "full_time", "substitution"]},
     "team": {"type": "string"},
     "player": {"type": ["string", "null"]},
     "x": {"type": ["number", "null"], "minimum": 0, "maximum": 105},
@@ -14,6 +14,7 @@
     "end_x": {"type": ["number", "null"]},
     "end_y": {"type": ["number", "null"]},
     "outcome": {"type": ["string", "null"], "description": "success | fail | on_target | off_target | blocked | won | lost"},
-    "speed_kmh": {"type": ["number", "null"]}
+    "speed_kmh": {"type": ["number", "null"]},
+    "player_off": {"type": ["string", "null"], "description": "substitution: who came off"}
   }
 }

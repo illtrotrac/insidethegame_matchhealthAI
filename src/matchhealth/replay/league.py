@@ -20,7 +20,11 @@ class Club:
     press: float           # 0 sits off .. 1 relentless high press
     tempo: float           # 0 patient build-up .. 1 quick, vertical
     directness: float      # 0 short passing .. 1 long balls
-    players: tuple[str, ...] = ()
+    players: tuple[str, ...] = ()  # starting XI: GK, RB, CB, CB, LB, DM, CM, CM, RW, ST, LW
+    bench: tuple[str, ...] = ()    # five substitutes
+
+
+POSITIONS = ("GK", "RB", "CB", "CB", "LB", "DM", "CM", "CM", "RW", "ST", "LW")
 
 
 # Riverside and Northgate keep their original rosters so existing tests and
@@ -48,6 +52,10 @@ _SURNAMES = [
     "Blackwood", "Cotterill", "Dunmore", "Ellery", "Foley", "Gunnarsson", "Haskins", "Ilori",
     "Juric", "Kilbride", "Lacey", "Mendel", "Norrie", "Ostrowski", "Pickard", "Rasmussen",
     "Sefton", "Tanko", "Varela", "Wakefield", "Asante", "Brightmore", "Crane", "Dossou",
+    "Aldous", "Birkett", "Calloway", "Dinsdale", "Ekwueme", "Fairbairn", "Gorecki", "Hennessy",
+    "Ingram", "Jessop", "Kowalczyk", "Larkspur", "Mwangi", "Nordahl", "Oyelaran", "Penhaligon",
+    "Quaye", "Rourke", "Saarinen", "Thackeray", "Uwimana", "Vesely", "Wainwright", "Yardley",
+    "Zubiri", "Achterlo", "Brannigan", "Corrigan", "Delahunt", "Ellwood",
 ]
 _INITIALS = "ABCDEFGHJKLMNOPRSTVWY"
 
@@ -65,19 +73,21 @@ _CLUB_DEFS = [
 ]
 
 
-def _roster(name: str, used: set[str]) -> tuple[str, ...]:
-    if name in _FIXED_ROSTERS:
-        return _FIXED_ROSTERS[name]
+def _roster(name: str, used: set[str]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """(starting XI, bench of five)."""
     rng = random.Random(zlib.crc32(name.encode()))  # stable across runs, unlike hash()
-    pool = [s for s in _SURNAMES if s not in used]
-    picks = rng.sample(pool, 11)
+    fixed = _FIXED_ROSTERS.get(name)
+    taken = {p.split(". ", 1)[1] for r in _FIXED_ROSTERS.values() for p in r}
+    pool = [s for s in _SURNAMES if s not in used and s not in taken]
+    picks = rng.sample(pool, 5 if fixed else 16)
     used.update(picks)
-    return tuple(f"{rng.choice(_INITIALS)}. {s}" for s in picks)
+    names = tuple(f"{rng.choice(_INITIALS)}. {s}" for s in picks)
+    return (fixed, names) if fixed else (names[:11], names[11:])
 
 
 def _build_league() -> tuple[Club, ...]:
     used: set[str] = set()
-    return tuple(Club(n, st, s, p, t, d, _roster(n, used)) for n, st, s, p, t, d in _CLUB_DEFS)
+    return tuple(Club(n, st, s, p, t, d, *_roster(n, used)) for n, st, s, p, t, d in _CLUB_DEFS)
 
 
 LEAGUE: tuple[Club, ...] = _build_league()

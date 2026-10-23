@@ -129,7 +129,7 @@ class SpotterExecutor(Executor):
                 "moment_id": trig.moment_id, "kind": trig.kind, "team": trig.team,
                 "player": trig.player, "show_at": clock(trig.t),
                 "priority": verdict.get("priority"), "confirmed": confirmed,
-                "reason": verdict.get("reason"),
+                "reason": verdict.get("reason"), "x": trig.x, "y": trig.y,
             })
         if confirmed:
             await ctx.send_message(Confirmed(trig, int(verdict.get("priority", 2))))

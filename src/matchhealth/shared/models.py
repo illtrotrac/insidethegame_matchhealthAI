@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 EventType = Literal[
     "kickoff", "pass", "shot", "tackle", "pressure", "possession_change",
-    "foul", "goal", "half_time", "full_time",
+    "foul", "goal", "half_time", "full_time", "substitution",
 ]
 
 TriggerKind = Literal[
@@ -34,6 +34,7 @@ class MatchEvent(BaseModel):
     end_y: float | None = None
     outcome: str | None = None
     speed_kmh: float | None = None
+    player_off: str | None = None  # substitution: who came off (player = who came on)
 
 
 class HealthSnapshot(BaseModel):
@@ -53,6 +54,8 @@ class Trigger(BaseModel):
     team: str
     player: str | None = None
     facts: dict  # numbers the agents may cite; agents must not invent others
+    x: float | None = None  # where it happened, pitch metres (105 x 68)
+    y: float | None = None
 
 
 class Explanation(BaseModel):

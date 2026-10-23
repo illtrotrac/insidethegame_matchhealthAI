@@ -31,11 +31,12 @@ class Team:
     tempo: float = 0.5
     directness: float = 0.5
     style: str = ""
+    bench: list[str] = field(default_factory=list)
 
     @classmethod
     def from_club(cls, club: Club, attacking_right: bool) -> Team:
         return cls(club.name, list(club.players), attacking_right, club.strength, club.press,
-                   club.tempo, club.directness, club.style)
+                   club.tempo, club.directness, club.style, list(club.bench))
 
 
 @dataclass
@@ -105,6 +106,25 @@ def generate_match(cfg: MatchConfig | None = None) -> list[MatchEvent]:
         return sum(p.intensity for p in cfg.phases
                    if p.start <= t < p.end and p.pressing_team != team.name)
 
+    # Three substitutions per team between 55' and 85' (outfield only),
+    # drawn up front so the rest of the stream stays reproducible per seed.
+    subs = sorted((rng.uniform(3300, 5100), team) for team in (home, away)
+                  for _ in range(min(3, len(team.bench))))
+
+    came_on: set[str] = set()
+
+    def make_subs(t: float) -> None:
+        while subs and subs[0][0] <= t:
+            at, team = subs.pop(0)
+            # Outfield starters only: a substitute is never taken back off.
+            off_i = rng.choice([i for i in range(1, len(team.players))
+                                if team.players[i] not in came_on])
+            on = team.bench.pop(0)
+            came_on.add(on)
+            emit(t=round(at, 1), type="substitution", team=team.name, player=on,
+                 player_off=team.players[off_i])
+            team.players[off_i] = on
+
     for half_start, half_end in ((0.0, 2700.0), (2700.0, 5400.0)):
         t = half_start
         in_poss = home if half_start == 0 else away
@@ -112,6 +132,7 @@ def generate_match(cfg: MatchConfig | None = None) -> list[MatchEvent]:
         x, y = PITCH_X / 2, PITCH_Y / 2
 
         while t < half_end:
+            make_subs(t)
             opp = away if in_poss is home else home
             press = pressing_against(in_poss, t)
             carrier = rng.choice(in_poss.players[1:])

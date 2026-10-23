@@ -152,6 +152,36 @@ def test_chosen_fixture_by_partial_name():
             MatchConfig(seed=5, **bad)
 
 
+def test_substitutions_are_realistic():
+    for seed in range(20):
+        cfg = MatchConfig(seed=seed)
+        subs = [e for e in generate_match(cfg) if e.type == "substitution"]
+        assert len(subs) == 6 and all(3300 <= e.t <= 5100 for e in subs)
+        came_on = {e.player for e in subs}
+        assert not came_on & {e.player_off for e in subs}  # a sub is never taken off
+
+
+def test_analytics_reflect_club_styles():
+    from matchhealth.engine.analytics import MatchAnalytics
+    ppda = {"hollowbrook": [], "port calder": []}
+    for seed in range(6):
+        cfg = MatchConfig(seed=seed, home="hollowbrook", away="port calder")
+        h, a = cfg.teams
+        ar = {h.name: h.attacking_right, a.name: a.attacking_right}
+        det = ThresholdDetector((h.name, a.name), ar)
+        an = MatchAnalytics((h.name, a.name), ar, det.engine)
+        for ev in generate_match(cfg):
+            det.process(ev)
+            an.update(ev)
+        team = an.team_payload()
+        assert len(team["zones"][h.name]) == 18 and len(team["tilt"][h.name]) == 6
+        for key, name in (("hollowbrook", h.name), ("port calder", a.name)):
+            ppda[key] += [v for v in team["ppda"][name] if v is not None]
+    # The relentless pressers allow fewer passes per defensive action than the low block.
+    assert sum(ppda["hollowbrook"]) / len(ppda["hollowbrook"]) < (
+        sum(ppda["port calder"]) / len(ppda["port calder"]))
+
+
 def test_goal_and_shot_rates_are_football_realistic():
     from statistics import mean
     stats = [Counter(e.type for e in generate_match(MatchConfig(seed=s))) for s in range(30)]

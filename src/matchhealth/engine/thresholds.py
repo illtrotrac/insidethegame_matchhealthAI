@@ -38,6 +38,7 @@ class ThresholdDetector:
         self._history: dict[str, deque[tuple[float, float]]] = {t: deque() for t in teams}
         self._last_fired: dict[tuple[str, str], float] = {}
         self._n = 0
+        self._last_xy: tuple[float | None, float | None] = (None, None)  # goals carry no x/y
         # Cumulative, match-long (not sliding-window) tallies for the
         # analyst-mode "Statistical Models" layer: attack/defense ratings and
         # win/draw/loss. xG here is literally sum(shot_quality) -- genuinely
@@ -63,12 +64,18 @@ class ThresholdDetector:
             return None
         self._last_fired[key] = ev.t
         self._n += 1
+        x, y = (ev.x, ev.y) if ev.x is not None else self._last_xy
+        # Momentum and pressing are team stories: naming whoever happened to
+        # touch the ball on the triggering event would mislead viewers.
+        player = None if kind in ("control_swing", "pressing_spell") else ev.player
         return Trigger(moment_id=f"m-{self._n:04d}", kind=kind, t=ev.t, team=team,
-                       player=ev.player, facts=facts)
+                       player=player, facts=facts, x=x, y=y)
 
     def process(self, ev: MatchEvent) -> list[Trigger]:
         snap = self.engine.update(ev)
         out: list[Trigger | None] = []
+        if ev.x is not None and ev.type != "goal":
+            self._last_xy = (ev.x, ev.y)
 
         if ev.type == "goal":
             out.append(self._fire("goal", ev, ev.team, {"scorer": ev.player}))

@@ -16,9 +16,11 @@ from matchhealth.agents.llm import mock_enabled
 from matchhealth.agents.narrator import CHECKPOINTS, Narrator
 from matchhealth.agents.orchestrator import DEFAULT_PERSONAS, Orchestrator
 from matchhealth.agents.publisher import console_publish
+from matchhealth.engine.analytics import MatchAnalytics
 from matchhealth.engine.stats import win_draw_loss
 from matchhealth.engine.thresholds import ThresholdDetector
 from matchhealth.replay.generator import MatchConfig, generate_match
+from matchhealth.replay.league import CLUBS, POSITIONS
 from matchhealth.replay.replayer import replay
 from matchhealth.replay.season import season_context
 from matchhealth.shared.models import clock
@@ -30,6 +32,14 @@ CATCHUP_EVERY_S = 60.0  # real seconds between catch-up snapshots for viewers wh
 INTERMISSION_RESEND_S = 20.0
 
 
+def squad(club: str) -> dict:
+    """Shirt numbers and positions for the line-ups panel (from the club, so
+    it's the starting XI even though the match mutates its Team on subs)."""
+    c = CLUBS[club]
+    return {"xi": [[i + 1, n, POSITIONS[i]] for i, n in enumerate(c.players)],
+            "bench": [[12 + i, n] for i, n in enumerate(c.bench)]}
+
+
 async def main(seed: int, speed: float, preview: bool = False,
                home_club: str | None = None, away_club: str | None = None,
                intermission_s: float = 0.0) -> StateStore:
@@ -39,7 +49,9 @@ async def main(seed: int, speed: float, preview: bool = False,
     season = season_context(seed, cfg.matchweek)
     season_msg = {"season": {k: v for k, v in season.items()
                              if k not in ("results", "player_goals")},
-                  "fixture": {"home": home.name, "away": away.name, "matchweek": cfg.matchweek}}
+                  "fixture": {"home": home.name, "away": away.name, "matchweek": cfg.matchweek,
+                              "speed": speed,
+                              "squads": {t.name: squad(t.name) for t in (home, away)}}}
     detector = ThresholdDetector((home.name, away.name),
                                  {home.name: home.attacking_right, away.name: away.attacking_right})
 
@@ -95,24 +107,16 @@ async def main(seed: int, speed: float, preview: bool = False,
           f"events, mock={mock_enabled()}")
 
     score = {home.name: 0, away.name: 0}
-    # Per-player pass attempts/completions -- "pass accuracy" is named
-    # explicitly in the brief, but nothing tracked it per player before (only
-    # a team-level completion % existed, in HealthSnapshot). Every pass
-    # updates this, not just the rare high-difficulty ones that fire a
-    # pass_quality trigger -- this is meant to be a genuine running stat.
-    player_passes: dict[str, dict] = {}
-
-    def record_pass(ev) -> None:
-        if ev.type != "pass" or not ev.player:
-            return
-        entry = player_passes.setdefault(
-            ev.player, {"team": ev.team, "attempts": 0, "completions": 0})
-        entry["attempts"] += 1
-        if ev.outcome == "success":
-            entry["completions"] += 1
+    # Analyst-mode numbers (engine/analytics.py): per-player passing, pressure,
+    # progressive passes, tackles, shots; per-15' PPDA and field tilt; zones.
+    analytics = MatchAnalytics((home.name, away.name),
+                               {home.name: home.attacking_right, away.name: away.attacking_right},
+                               detector.engine)
+    subs: list[list] = []  # [minute, team, on, off]
 
     # Everything a viewer who arrives late needs to see the whole match so far.
     pulse: list[list[float]] = []   # [minute, home control, away control] per tick
+    path: list[list] = []           # ball path since the last tick: [x, y, team index]
     goals: list[list] = []          # [minute, team]
     health_count = 0
     last_health: dict = {}
@@ -129,15 +133,21 @@ async def main(seed: int, speed: float, preview: bool = False,
             "score": dict(score),
         }
         if heavy:
-            msg.update(player_passes=player_passes, shots=detector.shots())
+            msg.update(player_passes=analytics.player_payload(), shots=detector.shots(),
+                       analytics=analytics.team_payload(), subs=subs)
+        if path:  # the page replays this between ticks: real positions, not decoration
+            msg["path"] = path[-16:]
+            path.clear()
         return msg
 
     async def send_health(t: float) -> None:
         nonlocal health_count
         msg = health_payload(t, heavy=health_count % HEAVY_EVERY == 0)
         health_count += 1
+        wdl = msg["win_draw_loss"]
         pulse.append([round(t / 60, 2), msg["teams"][home.name]["control"],
-                      msg["teams"][away.name]["control"]])
+                      msg["teams"][away.name]["control"],
+                      wdl["home_win_pct"], wdl["draw_pct"], wdl["away_win_pct"]])
         last_health.update(msg)
         await raw_send(msg)
 
@@ -170,13 +180,18 @@ async def main(seed: int, speed: float, preview: bool = False,
     next_tick_t = HEALTH_TICK_S
     last_catchup = time.monotonic()
     async for ev in replay(events, speed=speed):
-        record_pass(ev)
+        if ev.x is not None:
+            path.append([round(ev.x, 1), round(ev.y, 1), 0 if ev.team == home.name else 1])
         if ev.type == "goal":
             score[ev.team] += 1
             goals.append([round(ev.t / 60, 2), ev.team])
             if raw_send:
                 await send_health(ev.t)  # don't wait for the next periodic tick on a goal
-        for trig in detector.process(ev):
+        triggers = detector.process(ev)
+        analytics.update(ev)  # after the engine has seen ev (pressure state)
+        if ev.type == "substitution":
+            subs.append([round(ev.t / 60), ev.team, ev.player, ev.player_off])
+        for trig in triggers:
             await crew.handle(trig)
         if ev.type == "half_time":
             narrator_tasks.append(asyncio.create_task(
