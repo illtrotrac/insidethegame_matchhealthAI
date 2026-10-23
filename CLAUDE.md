@@ -38,10 +38,12 @@ Match Health AI: entry for the Microsoft x Premier League "Inside the Game" hack
     `az containerapp job logs show --name matchhealth-replay --resource-group matchhealth-rg
     --container matchhealth-replay --execution <name>`.
   - `matchhealth-demo` (same image, MATCHHEALTH_MOCK_LLM=1, **Schedule** trigger, cron
-    `0 */2 * * *` — every 2 hours) — live, started running 22 Oct. Exists so the public site isn't
-    showing an idle page if a judge visits between manually-triggered real-mode runs during the
-    Oct 27 - Nov 10 judging period (15 days; see official rules -- judging doesn't end at
-    submission).
+    `0 */2 * * *` — every 2 hours) — **currently deleted** (paused 22 Oct while iterating heavily
+    during the day, to avoid matches auto-firing in the background during active dev). Exists so
+    the public site isn't showing an idle page if a judge visits between manually-triggered
+    real-mode runs during the Oct 27 - Nov 10 judging period (15 days; see official rules --
+    judging doesn't end at submission). **Must be recreated before judging starts** (see the
+    command below) -- it is not currently running.
     `--seed` and `--speed` are both omitted (random seed, real-time `--speed 1` from the image's
     default CMD), so every execution is a different ~90-minute match written to its own
     `seed-<n>` Cosmos document. Estimated cost for running the full judging window: **~$5-15**
