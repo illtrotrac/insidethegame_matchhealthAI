@@ -32,6 +32,26 @@ def _client_access_url() -> str:
     return token["url"]
 
 
+_snapshot_cache: dict = {"at": 0.0, "value": None}
+
+
+def _snapshot() -> dict | None:
+    """The demo job's latest catch-up, so a new viewer sees the match at once.
+    Cached for 10s: a crowd of viewers costs one Cosmos read, not one each."""
+    import time
+    if not os.environ.get("COSMOS_ENDPOINT"):
+        return None
+    if time.time() - _snapshot_cache["at"] > 10:
+        try:
+            from matchhealth.shared.state import load_live_snapshot
+            _snapshot_cache["value"] = load_live_snapshot()
+        except Exception:  # pragma: no cover
+            log.exception("snapshot read failed")
+            _snapshot_cache["value"] = None
+        _snapshot_cache["at"] = time.time()
+    return _snapshot_cache["value"]
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path not in ("/negotiate", "/"):
@@ -40,7 +60,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             url = _client_access_url()
-            body = json.dumps({"url": url}).encode()
+            body = json.dumps({"url": url, "snapshot": _snapshot()}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Access-Control-Allow-Origin", "*")

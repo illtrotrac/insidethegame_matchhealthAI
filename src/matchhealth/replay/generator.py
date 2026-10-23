@@ -14,7 +14,14 @@ import math
 import random
 from dataclasses import dataclass, field
 
-from matchhealth.replay.league import CLUBS, Club, fixture_for, matchweek_of, resolve_club
+from matchhealth.replay.league import (
+    CLUBS,
+    Club,
+    fixture_for,
+    lineup_for,
+    matchweek_of,
+    resolve_club,
+)
 from matchhealth.shared.models import MatchEvent
 
 PITCH_X, PITCH_Y = 105.0, 68.0
@@ -34,9 +41,12 @@ class Team:
     bench: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_club(cls, club: Club, attacking_right: bool) -> Team:
-        return cls(club.name, list(club.players), attacking_right, club.strength, club.press,
-                   club.tempo, club.directness, club.style, list(club.bench))
+    def from_club(cls, club: Club, attacking_right: bool, matchweek: int = 0) -> Team:
+        """matchweek > 0: that week's rotated XI and bench (league.lineup_for)."""
+        xi, bench = (lineup_for(club.name, matchweek) if matchweek
+                     else (list(club.players), list(club.bench)))
+        return cls(club.name, xi, attacking_right, club.strength, club.press,
+                   club.tempo, club.directness, club.style, bench)
 
 
 @dataclass
@@ -80,7 +90,8 @@ class MatchConfig:
                 self.matchweek = matchweek_of(home, away)
             else:
                 self.matchweek, home, away = fixture_for(self.seed)
-            self.teams = (Team.from_club(CLUBS[home], True), Team.from_club(CLUBS[away], False))
+            self.teams = (Team.from_club(CLUBS[home], True, self.matchweek),
+                          Team.from_club(CLUBS[away], False, self.matchweek))
         if self.phases is None:
             self.phases = _pressing_phases(rng, self.teams)
 

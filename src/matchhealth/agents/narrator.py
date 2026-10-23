@@ -65,22 +65,31 @@ class Narrator:
         slug = label.lower().replace("'", "").replace("-", "")
         return await self._write(f"n-{slug}", "checkpoint", label, t, facts, "nano")
 
+    async def brief(self, label: str, t: float, live: dict) -> dict:
+        """Analyst chart briefing: the numbers behind the charts, in words.
+        Analyst personas only; shown behind the Charts panel's summary button."""
+        slug = label.lower().replace("'", "").replace("-", "").replace(" ", "")
+        return await self._write(f"n-brief-{slug}", "brief", label, t,
+                                 self._brief_facts(label, t, live), "nano",
+                                 keys=[k for k in self.keys if k.startswith("analyst-")])
+
     async def recap(self, live: dict) -> dict:
         facts = self._live_facts(5400.0, live, full=True)
         return await self._write("n-recap", "recap", "Full time", 5400.0, facts, "mini")
 
     async def _write(self, doc_id: str, kind: str, label: str, t: float, facts: dict,
-                     tier: str) -> dict:
-        variants = {k: RENDER[kind](facts, *k.split("-", 1)) for k in self.keys}
+                     tier: str, keys: list[str] | None = None) -> dict:
+        keys = keys or self.keys
+        variants = {k: RENDER[kind](facts, *k.split("-", 1)) for k in keys}
         recovery = None
         if not (mock_enabled() or self.llm is None):
             try:
                 data = await asyncio.wait_for(self.llm.complete_json(
                     load_prompt("narrator"),
-                    {"task": kind, "personas": self.keys, "facts": facts}, tier),
+                    {"task": kind, "personas": keys, "facts": facts}, tier),
                     NARRATOR_TIMEOUT_S)
-                got = _validated(data, self.keys)
-                missing = [k for k in self.keys if k not in got]
+                got = _validated(data, keys)
+                missing = [k for k in keys if k not in got]
                 variants.update(got)
                 if missing:
                     recovery = {"reason": "incomplete", "missing": missing}
@@ -120,6 +129,33 @@ class Narrator:
         return {"matchweek": self.fixture["matchweek"], "home": team(home), "away": team(away),
                 "previous_meeting": prev and {"home": prev["home"], "away": prev["away"],
                                               "score": prev["score"]}}
+
+    def _brief_facts(self, label: str, t: float, live: dict) -> dict:
+        home, away = self.fixture["home"], self.fixture["away"]
+        an, players = live["analytics"], live["players"]
+
+        def done(vals: list) -> list:
+            return [v for v in vals if v is not None]
+
+        def lead(key: str) -> dict | None:
+            if not players:
+                return None
+            name, p = max(players.items(), key=lambda kv: kv[1][key])
+            return {"player": name, "team": p["team"], "completions": p["completions"],
+                    "attempts": p["attempts"], "progressive": p["progressive"]}
+
+        return {
+            "label": label, "clock": clock(t), "home": home, "away": away,
+            "score": {n: live["score"][n] for n in (home, away)},
+            "xg": {n: live["ratings"][n]["xg"] for n in (home, away)},
+            "shots": {n: live["ratings"][n]["shots"] for n in (home, away)},
+            "ppda_avg": {n: round(sum(done(an["ppda"][n])) / len(done(an["ppda"][n])), 1)
+                         if done(an["ppda"][n]) else None for n in (home, away)},
+            # The last *completed* 15-minute block: the current one may hold a few passes.
+            "field_tilt_last_15": {n: an["tilt"][n][max(0, min(5, int(t // 900) - 1))]
+                                   for n in (home, away)},
+            "top_passer": lead("completions"), "top_progressive": lead("progressive"),
+        }
 
     def _live_facts(self, t: float, live: dict, full: bool = False) -> dict:
         home, away = self.fixture["home"], self.fixture["away"]
@@ -299,4 +335,32 @@ def _recap_text(f: dict, mode: str, lang: str) -> dict:
     return {"title": T["ft_title"].format(**v), "lines": lines}
 
 
-RENDER = {"pre_match": _pre_match_text, "checkpoint": _checkpoint_text, "recap": _recap_text}
+def _brief_text(f: dict, mode: str, lang: str) -> dict:
+    lang = lang_of(lang)
+    T = NARRATIVE[lang]
+    H, A = f["home"], f["away"]
+    lines = []
+    (hx, ax), (hs, as_) = _pair(f, "xg"), _pair(f, "shots")
+    if abs(hx - ax) >= 0.3:
+        team, x, y, s = (H, hx, ax, hs) if hx > ax else (A, ax, hx, as_)
+        lines.append(T["brief_xg_lead"].format(team=team, x=f"{x:.2f}", y=f"{y:.2f}", s=s))
+    else:
+        lines.append(T["brief_xg_level"].format(x=f"{hx:.2f}", y=f"{ax:.2f}"))
+    hp, ap = _pair(f, "ppda_avg")
+    if hp is not None and ap is not None:
+        team, other, p, q = (H, A, hp, ap) if hp <= ap else (A, H, ap, hp)
+        lines.append(T["brief_press"].format(team=team, other=other, p=p, q=q))
+    ht = f["field_tilt_last_15"][H]
+    if ht is not None:
+        team, v = (H, ht) if ht >= 50 else (A, 100 - ht)
+        lines.append(T["brief_tilt"].format(team=team, v=v))
+    tp = f["top_passer"]
+    if tp:
+        lines.append(T["brief_passer"].format(p=tp["player"], team=tp["team"], c=tp["completions"],
+                                              a=tp["attempts"], prog=tp["progressive"]))
+    label = T["labels"].get(f["label"], f["label"])
+    return {"title": T["brief_title"].format(label=label), "lines": lines}
+
+
+RENDER = {"pre_match": _pre_match_text, "checkpoint": _checkpoint_text, "recap": _recap_text,
+          "brief": _brief_text}

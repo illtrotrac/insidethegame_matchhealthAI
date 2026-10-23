@@ -39,3 +39,6 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/matchhealth/agents/mock_text.py" = ["E501"]  # translated sentences read better unbroken

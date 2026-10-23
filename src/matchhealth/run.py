@@ -20,7 +20,7 @@ from matchhealth.engine.analytics import MatchAnalytics
 from matchhealth.engine.stats import win_draw_loss
 from matchhealth.engine.thresholds import ThresholdDetector
 from matchhealth.replay.generator import MatchConfig, generate_match
-from matchhealth.replay.league import CLUBS, POSITIONS
+from matchhealth.replay.league import CLUBS, POSITIONS, lineup_for
 from matchhealth.replay.replayer import replay
 from matchhealth.replay.season import season_context
 from matchhealth.shared.models import clock
@@ -32,12 +32,15 @@ CATCHUP_EVERY_S = 60.0  # real seconds between catch-up snapshots for viewers wh
 INTERMISSION_RESEND_S = 20.0
 
 
-def squad(club: str) -> dict:
-    """Shirt numbers and positions for the line-ups panel (from the club, so
-    it's the starting XI even though the match mutates its Team on subs)."""
+def squad(club: str, matchweek: int) -> dict:
+    """Shirt numbers and positions for the line-ups panel: this week's rotated
+    XI (computed again, since the match mutates its Team on substitutions).
+    Shirt numbers belong to the player, from the full squad order."""
     c = CLUBS[club]
-    return {"xi": [[i + 1, n, POSITIONS[i]] for i, n in enumerate(c.players)],
-            "bench": [[12 + i, n] for i, n in enumerate(c.bench)]}
+    number = {n: i + 1 for i, n in enumerate((*c.players, *c.bench))}
+    xi, bench = lineup_for(club, matchweek)
+    return {"xi": [[number[n], n, POSITIONS[i]] for i, n in enumerate(xi)],
+            "bench": [[number[n], n] for n in bench]}
 
 
 async def main(seed: int, speed: float, preview: bool = False,
@@ -46,12 +49,13 @@ async def main(seed: int, speed: float, preview: bool = False,
     cfg = MatchConfig(seed=seed, home=home_club, away=away_club)
     events = generate_match(cfg)
     home, away = cfg.teams
-    season = season_context(seed, cfg.matchweek)
+    season = season_context(seed, cfg.matchweek, focus=(home.name, away.name))
     season_msg = {"season": {k: v for k, v in season.items()
                              if k not in ("results", "player_goals")},
                   "fixture": {"home": home.name, "away": away.name, "matchweek": cfg.matchweek,
                               "speed": speed,
-                              "squads": {t.name: squad(t.name) for t in (home, away)}}}
+                              "squads": {t.name: squad(t.name, cfg.matchweek)
+                                         for t in (home, away)}}}
     detector = ThresholdDetector((home.name, away.name),
                                  {home.name: home.attacking_right, away.name: away.attacking_right})
 
@@ -151,14 +155,24 @@ async def main(seed: int, speed: float, preview: bool = False,
         last_health.update(msg)
         await raw_send(msg)
 
+    # Only the deployed job (Cosmos, no local preview) keeps the live snapshot.
+    keep_snapshot = bool(os.environ.get("COSMOS_ENDPOINT")) and not preview
+
     async def send_catchup(status: str, next_kickoff_in_s: float | None = None) -> None:
         t = pulse[-1][0] * 60 if pulse else 0.0
-        await raw_send({"catchup": {
+        catchup = {
             **season_msg, "status": status, "next_kickoff_in_s": next_kickoff_in_s,
             "health": {**last_health, **health_payload(t, heavy=True)} if last_health else None,
             "pulse": pulse, "goals": goals, "narratives": narrator.log,
             "last_overlay": last_overlay or None,
-        }})
+        }
+        await raw_send({"catchup": catchup})
+        if keep_snapshot:
+            try:
+                from matchhealth.shared.state import save_live_snapshot
+                save_live_snapshot(catchup)
+            except Exception as exc:  # a missed snapshot must never stop the match
+                print(f"snapshot not saved: {exc}")
 
     if raw_send:
         # Team names/clock otherwise sit blank until the first periodic tick
@@ -167,11 +181,14 @@ async def main(seed: int, speed: float, preview: bool = False,
         await raw_send(season_msg)
         await send_health(0.0)
     await narrator.pre_match()
+    if raw_send:
+        await send_catchup("live")  # replaces the last match's full-time snapshot at once
 
     def live(t: float) -> dict:
         snap = detector.engine.snapshot()
         return {"score": dict(score), "ratings": detector.match_stats(t),
-                "control": {n: snap[n].control for n in (home.name, away.name)}}
+                "control": {n: snap[n].control for n in (home.name, away.name)},
+                "analytics": analytics.team_payload(), "players": analytics.player_payload()}
 
     # Checkpoints run alongside the replay rather than blocking it while the
     # model writes; the recap waits for them so the story stays in order.
@@ -193,13 +210,14 @@ async def main(seed: int, speed: float, preview: bool = False,
             subs.append([round(ev.t / 60), ev.team, ev.player, ev.player_off])
         for trig in triggers:
             await crew.handle(trig)
+        label = None
         if ev.type == "half_time":
-            narrator_tasks.append(asyncio.create_task(
-                narrator.checkpoint("Half-time", ev.t, live(ev.t))))
+            label = "Half-time"
         elif checkpoints and ev.t >= checkpoints[0][0]:
             label = checkpoints.pop(0)[1]
-            narrator_tasks.append(asyncio.create_task(
-                narrator.checkpoint(label, ev.t, live(ev.t))))
+        if label:
+            narrator_tasks.append(asyncio.create_task(narrator.checkpoint(label, ev.t, live(ev.t))))
+            narrator_tasks.append(asyncio.create_task(narrator.brief(label, ev.t, live(ev.t))))
         if raw_send and ev.t >= next_tick_t:
             await send_health(ev.t)
             next_tick_t = ev.t + HEALTH_TICK_S
@@ -207,6 +225,7 @@ async def main(seed: int, speed: float, preview: bool = False,
             await send_catchup("live")
             last_catchup = time.monotonic()
     await asyncio.gather(*narrator_tasks)
+    await narrator.brief("Full time", 5400.0, live(5400.0))
     await narrator.recap(live(5400.0))
     print(f"Full time. {len(store.moments())} moments produced. Final score: {score}")
     if raw_send:

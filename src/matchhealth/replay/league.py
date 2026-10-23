@@ -94,6 +94,20 @@ LEAGUE: tuple[Club, ...] = _build_league()
 CLUBS: dict[str, Club] = {c.name: c for c in LEAGUE}
 
 
+def lineup_for(club: str, matchweek: int) -> tuple[list[str], list[str]]:
+    """This matchweek's starting XI and bench. Managers rotate 0-3 outfield
+    starters a week (deterministic per club and week); the player rotated in
+    takes the starter's position slot (POSITIONS[i])."""
+    c = CLUBS[club]
+    xi, bench = list(c.players), list(c.bench)
+    rng = random.Random(zlib.crc32(f"{club}:{matchweek}".encode()))
+    k = rng.choice((0, 1, 1, 2, 2, 3))
+    for slot, b in zip(rng.sample(range(1, 11), k), rng.sample(range(len(bench)), k),
+                       strict=True):
+        xi[slot], bench[b] = bench[b], xi[slot]
+    return xi, bench
+
+
 def schedule() -> list[list[tuple[str, str]]]:
     """Double round robin (circle method): 14 matchweeks of 4 (home, away) fixtures."""
     names = [c.name for c in LEAGUE]

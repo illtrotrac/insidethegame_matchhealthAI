@@ -212,6 +212,7 @@
     .form i { width: 20px; height: 20px; border-radius: 4px; font-style: normal; font-size: .72rem; font-weight: 800;
       color: var(--bg); display: inline-flex; align-items: center; justify-content: center; }
     .form .W { background: var(--win); } .form .D { background: var(--muted); } .form .L { background: var(--red); }
+    #statsTable td { white-space: nowrap; }
     .bar { height: 8px; border-radius: 4px; background: rgba(238,241,232,.1); overflow: hidden; min-width: 80px; }
     .bar > div { height: 100%; }
     .club-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
@@ -243,6 +244,40 @@
     .act.no .b { background: rgba(143,163,156,.18); color: var(--muted); }
     .act .h { font-weight: 700; } .act .m { font-size: .88rem; color: var(--ink-dim); }
     .act .r { font-size: .88rem; color: var(--ink-dim); font-style: italic; }
+
+    /* ---- loading, joined note, full screen, comparisons, AI summary -------- */
+    .joined { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); z-index: 50;
+      background: var(--ink); color: var(--bg); font-weight: 700; border-radius: 999px; padding: 10px 18px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.4); font-size: .95rem; }
+    .loading-bar { height: 4px; border-radius: 2px; background: rgba(238,241,232,.1); overflow: hidden; width: 220px; }
+    .loading-bar div { height: 100%; width: 40%; background: var(--home); animation: load 1.2s ease-in-out infinite; }
+    @keyframes load { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+    .air-tools { display: flex; gap: 10px; align-items: center; }
+    .icon-btn { border: 1px solid rgba(238,241,232,.18); background: transparent; color: var(--ink);
+      border-radius: 8px; padding: 6px 12px; font-weight: 600; font-size: .85rem; cursor: pointer; min-height: 34px; }
+    .stage-score { display: none; position: absolute; left: 3%; top: 4%; z-index: 4; background: rgba(11,25,22,.93);
+      border-radius: 10px; padding: 8px 14px; font-weight: 800; font-stretch: 70%; font-size: 1.4rem; gap: 12px; align-items: center; }
+    .stage:fullscreen { aspect-ratio: auto; width: 100vw; height: 100vh; border-radius: 0; }
+    .stage:fullscreen .stage-score { display: flex; }
+    .stage:fullscreen .metric-pin { top: 14%; }
+    .stage:fullscreen .ov-head { font-size: clamp(1.6rem, 3vw, 3rem); }
+    .stage:fullscreen .ov-tag, .stage:fullscreen .ov-sub { font-size: 1.1rem; }
+    .changes { font-size: .92rem; color: var(--ink-dim); margin: 0 0 8px; line-height: 1.5; }
+    .changes b { color: var(--ink); }
+    .last2 { display: inline-flex; gap: 3px; }
+    .last2 i { width: 18px; height: 18px; border-radius: 4px; font-style: normal; font-size: .62rem; font-weight: 800;
+      display: inline-flex; align-items: center; justify-content: center; }
+    .last2 .S { background: var(--ink); color: var(--bg); }
+    .last2 .U { border: 1.5px solid var(--ink-dim); color: var(--ink-dim); }
+    .last2 .N { background: rgba(238,241,232,.1); color: rgba(238,241,232,.5); }
+    .lu-row { grid-template-columns: 38px 28px minmax(0, 1fr) 36px 44px auto; }
+    .delta.up { color: var(--win); } .delta.down { color: var(--red); }
+    .ai-btn { border: 0; background: var(--focus); color: var(--bg); font-weight: 800; border-radius: 999px;
+      padding: 8px 16px; cursor: pointer; min-height: 38px; }
+    .ai-box { background: var(--panel-2); border-radius: 14px; padding: 16px 18px; border-left: 3px solid var(--focus); }
+    .ai-box h3 { margin: 0 0 6px; font-size: 1.15rem; font-weight: 800; }
+    .ai-box p { margin: 0 0 6px; font-size: 1rem; line-height: 1.5; }
+    .ai-box small { color: var(--ink-dim); font-size: .82rem; }
 
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; animation: none !important; }
@@ -294,11 +329,12 @@
     </div>
   </header>
 
+  <div class="joined" id="joined" role="status" hidden></div>
   <main class="wrap grid">
     <article class="panel p-now" aria-live="polite">
-      <div class="now-tag" id="nowTag"><span>Waiting for kick-off</span></div>
-      <h1 class="now-head" id="nowHead">The first big moment will appear here</h1>
-      <p class="now-sub" id="nowSub">When something matters, the crew explains why.</p>
+      <div class="now-tag" id="nowTag"><div class="loading-bar"><div></div></div></div>
+      <h1 class="now-head" id="nowHead">Connecting to the live match</h1>
+      <p class="now-sub" id="nowSub">Fetching the score, the story so far and the latest moment.</p>
       <div class="chips" id="nowChips"></div>
     </article>
 
@@ -310,15 +346,17 @@
     </section>
 
     <section class="panel p-charts" aria-label="Charts">
-      <div class="panel-head"><h2>Charts</h2><span>Built live from every event in the match</span></div>
+      <div class="panel-head"><h2>Charts</h2><button type="button" class="ai-btn" id="aiBtn" aria-expanded="false">Summarise these charts</button></div>
+      <div class="ai-box" id="aiBox" hidden></div>
       <div class="tabs" role="tablist" id="chartTabs"></div>
       <p class="chart-how" id="chartHow"></p>
       <div class="chart-view" id="chartView"></div>
     </section>
 
     <section class="p-air" aria-label="On air">
-      <div class="panel-head"><h2>On air</h2><span>The overlay as viewers see it</span></div>
+      <div class="panel-head"><h2>On air</h2><div class="air-tools"><span class="dim" style="font-size:.85rem">The overlay as viewers see it</span><button type="button" class="icon-btn" id="fsBtn">Full screen</button></div></div>
       <div class="stage" id="stage">
+        <div class="stage-score" id="stageScore"></div>
         <svg class="pitch-lines" viewBox="0 0 1600 900" preserveAspectRatio="none" aria-hidden="true">
           <rect x="40" y="40" width="1520" height="820"></rect><line x1="800" y1="40" x2="800" y2="860"></line>
           <circle cx="800" cy="450" r="130"></circle><rect x="40" y="260" width="230" height="380"></rect>
@@ -405,7 +443,7 @@
 
     // ---- state ---------------------------------------------------------------
     let teamNames = null, lastHealth = null, lastMsg = null, fixture = null, lastShots = [];
-    let analytics = null, players = {}, subs = [], teamFilter = [];
+    let analytics = null, players = {}, subs = [], teamFilter = [], seasonData = null;
     let pulse = [], pulseGoals = [], lastScore = null;
     const narratives = new Map(), seenPlayers = new Set(), momentLoc = new Map();
     const tallies = new Map(); // player -> {team, counts:{goal,yellow,...}, total, last}
@@ -492,6 +530,19 @@
       markerTimer = setTimeout(() => { marker.hidden = true; }, secs * 1000);
     }
 
+    // ---- full screen On air: the broadcast view, with a score bug ----------------
+    $('fsBtn').addEventListener('click', () => {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else stage.requestFullscreen?.();
+    });
+    document.addEventListener('fullscreenchange', () => {
+      $('fsBtn').textContent = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
+    });
+    function renderStageScore() {
+      if (!teamNames) return;
+      $('stageScore').innerHTML = `<span style="color:var(--home)">${esc(teamNames[0])}</span><span>${esc($('score').textContent)}</span><span style="color:var(--away)">${esc(teamNames[1])}</span><span class="dim" style="font-size:1rem;font-stretch:100%">${esc($('clock').textContent)}</span>`;
+    }
+
     // ---- health tick -------------------------------------------------------------
     function updateHealth(msg) {
       if (!teamNames) {
@@ -509,7 +560,7 @@
       if (msg.path && msg.path.length) playPath(msg.path);
       lastHealth = { ...(lastHealth || {}), ...msg };
       recordPulse(msg);
-      renderControl(); renderKeys(); renderMetricPin();
+      renderControl(); renderKeys(); renderMetricPin(); renderStageScore(); noteFirstData(msg.show_at);
       if (msg.player_passes || msg.subs) { renderStats(); renderLineups(); }
       if (mode() === 'analyst' && (msg.analytics || msg.shots)) renderChart();
     }
@@ -590,11 +641,35 @@
       }
     }
 
+    // ---- loading state and the "you joined at" note --------------------------------
+    let gotData = false;
+    setTimeout(() => { if (!gotData) {
+      $('nowHead').textContent = 'Waiting for the match feed';
+      $('nowSub').textContent = 'A full catch-up arrives within a minute. If no match is on, the next one starts on the next 20-minute mark.';
+    } }, 7000);
+    function noteFirstData(showAt) {
+      if (gotData) return;
+      gotData = true;
+      if (!lastMsg) {
+        $('nowTag').innerHTML = '<span>Live</span>';
+        $('nowHead').textContent = 'The first big moment will appear here';
+        $('nowSub').textContent = 'When something matters, the crew explains why.';
+      }
+      const min = Math.floor(toSeconds(showAt) / 60);
+      if (min >= 2) {
+        const el = $('joined');
+        el.textContent = `You joined at ${min}'. The story so far is below.`;
+        el.hidden = false;
+        setTimeout(() => { el.hidden = true; }, 6000);
+      }
+    }
+
     // ---- season, table, line-ups ---------------------------------------------------
     function updateSeason(msg) {
       noteFixture(msg.fixture);
       fixture = msg.fixture;
       const { season } = msg;
+      seasonData = season;
       $('matchweek').textContent = `Matchweek ${fixture.matchweek}`; $('matchweek').hidden = false;
       const sp = fixture.speed;
       $('simNote').textContent = !sp ? 'Simulated match' : sp === 1 ? 'Simulated match, real time'
@@ -631,9 +706,23 @@
           if (subOff.has(name)) out.push(`${ICON.off}${subOff.get(name)}'`);
           return `<span class="icons">${out.join(' ')}</span>`;
         };
-        const xi = sq.xi.map(([no, name, pos]) => `<div class="lu-row ${subOff.has(name) ? 'off' : ''}">${avatar(name, kitHex)}<span class="no">${no}</span><span class="nm">${esc(name)}</span><span class="ps">${pos}</span>${marks(name)}</div>`).join('');
+        // Compared with this club's last two games (season.recent, newest first).
+        const recent = (seasonData?.recent?.[club] || []);
+        const last2 = name => `<span class="last2">${recent.map(g => {
+          const st = g.xi.includes(name) ? 'S' : g.subs_on.includes(name) ? 'U' : 'N';
+          const word = { S: 'started', U: 'came on', N: 'did not play' }[st];
+          return `<i class="${st}" title="MW${g.matchweek} v ${esc(g.opponent)}: ${word}">${{ S: 'S', U: 'Sub', N: '–' }[st]}</i>`;
+        }).join('')}</span>`;
+        let changes = '';
+        if (recent[0]) {
+          const today = sq.xi.map(p => p[1]), prev = recent[0].xi;
+          const ins = today.filter(n => !prev.includes(n)), outs = prev.filter(n => !today.includes(n));
+          const res = `${recent[0].score[0] > recent[0].score[1] ? 'W' : recent[0].score[0] < recent[0].score[1] ? 'L' : 'D'} ${recent[0].score.join('-')}`;
+          changes = `<p class="changes">Last match: MW${recent[0].matchweek} ${recent[0].venue === 'H' ? 'v' : 'at'} ${esc(recent[0].opponent)} (${res}). ${ins.length ? `<b>In:</b> ${ins.map(esc).join(', ')}. <b>Out:</b> ${outs.map(esc).join(', ')}.` : 'Same starting XI.'} Boxes show the last two games: S started, Sub came on, – did not play.</p>`;
+        }
+        const xi = sq.xi.map(([no, name, pos]) => `<div class="lu-row ${subOff.has(name) ? 'off' : ''}">${avatar(name, kitHex)}<span class="no">${no}</span><span class="nm">${esc(name)}</span><span class="ps">${pos}</span>${last2(name)}${marks(name)}</div>`).join('');
         const bench = sq.bench.map(([no, name]) => `<span class="b">${avatar(name, kitHex, 28)}<span class="dim">${no}</span> ${esc(name)}${subOn.has(name) ? ` ${ICON.on}<span style="color:var(--win)">${subOn.get(name)}'</span>` : ''}</span>`).join('');
-        return `<section><div class="lu-head"><h3 style="color:${kit}">${esc(club)}</h3></div>${xi}<div class="dim" style="font-weight:700;margin-top:14px">Substitutes</div><div class="bench">${bench}</div></section>`;
+        return `<section><div class="lu-head"><h3 style="color:${kit}">${esc(club)}</h3></div>${changes}${xi}<div class="dim" style="font-weight:700;margin-top:14px">Substitutes</div><div class="bench">${bench}</div></section>`;
       }).join('');
     }
 
@@ -650,15 +739,19 @@
       const capped = !analyst && !statsExpanded && rows.length > 6;
       const shown = capped ? rows.slice(0, 6) : rows;
       const cls = n => `${n === f ? 'focused' : ''} ${f && n !== f ? 'dimmed' : ''}`;
-      const club = t => `<span class="club-dot" style="background:var(${teamNames && t === teamNames[0] ? '--home' : '--away'})"></span>${esc(t)}`;
+      const club = t => `<span class="club-dot" style="background:var(${teamNames && t === teamNames[0] ? '--home' : '--away'})"></span><span title="${esc(t)}">${esc(t.split(' ')[0])}</span>`;
       if (!rows.length) { $('statsTable').innerHTML = `<tr><td class="l empty">${analyst ? 'Passing numbers arrive with the first ticks.' : 'Nobody has made the news yet.'}</td></tr>`; }
       else if (analyst) {
-        $('statsTable').innerHTML = `<thead><tr><th class="l">Player</th><th class="l">Club</th><th>Passes</th><th>Acc.</th><th class="l">Accuracy</th><th>Prog.</th><th>Under press.</th></tr></thead><tbody>` +
+        $('statsTable').innerHTML = `<thead><tr><th class="l">Player</th><th class="l">Club</th><th>Passes</th><th>Acc.</th><th class="l">Accuracy</th><th>Prog.</th><th>Under press.</th><th>Last 2 acc.</th></tr></thead><tbody>` +
           shown.map(([n, p]) => {
             const acc = p.attempts ? Math.round(100 * p.completions / p.attempts) : 0;
             const pr = p.pressured_att ? `${Math.round(100 * p.pressured_comp / p.pressured_att)}%` : '–';
             const col = teamNames && p.team === teamNames[0] ? 'var(--home)' : 'var(--away)';
-            return `<tr class="${cls(n)}"><td class="l"><b>${esc(n)}</b></td><td class="l dim">${club(p.team)}</td><td>${p.completions}/${p.attempts}</td><td><b>${acc}%</b></td><td class="l"><div class="bar"><div style="width:${acc}%;background:${col}"></div></div></td><td>${p.progressive}</td><td>${pr}</td></tr>`;
+            let prev = 0, prevA = 0;
+            (seasonData?.recent?.[p.team] || []).forEach(g => { const q = g.players[n]; if (q) { prev += q.completions; prevA += q.attempts; } });
+            const before = prevA ? Math.round(100 * prev / prevA) : null, d = before == null ? null : acc - before;
+            const last2 = !seasonData ? '<span class="dim">–</span>' : before == null ? '<span class="dim">new</span>' : `${before}% <span class="delta ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '▲' : '▼'}${Math.abs(d)}</span>`;
+            return `<tr class="${cls(n)}"><td class="l"><b>${esc(n)}</b></td><td class="l dim">${club(p.team)}</td><td>${p.completions}/${p.attempts}</td><td><b>${acc}%</b></td><td class="l"><div class="bar"><div style="width:${acc}%;background:${col}"></div></div></td><td>${p.progressive}</td><td>${pr}</td><td>${last2}</td></tr>`;
           }).join('') + '</tbody>';
       } else {
         $('statsTable').innerHTML = '<tbody>' + shown.map(([n, e]) => `<tr class="${cls(n)}"><td class="l"><b>${esc(n)}</b></td><td class="l dim">${club(e.team)}</td><td><span class="icons">${Object.entries(e.counts).map(([k, c]) => `${ICON[k] || ''}${c > 1 ? c : ''}`).join(' ')}</span></td></tr>`).join('') + '</tbody>';
@@ -701,15 +794,37 @@
     // ---- story ------------------------------------------------------------------------
     const STORY_WHEN = { pre_match: 'Before', recap: 'FT' };
     function renderStory() {
-      if (!narratives.size) return;
-      const items = [...narratives.values()].reverse();
+      renderAiBox();
+      const items = [...narratives.values()].filter(n => n.kind !== 'brief').reverse();
+      if (!items.length) return;
       $('storyList').innerHTML = items.map((item, i) => {
         const v = item.variants[`${mode()}-${lang()}`] || item.variants[`${mode()}-en`] || Object.values(item.variants)[0];
         const when = STORY_WHEN[item.kind] || (item.label === 'Half-time' ? 'HT' : item.label);
         const cls = item.kind === 'recap' ? 'recap' : (i > 1 ? 'older' : '');
         return `<div class="when ${item.kind === 'pre_match' ? 'quiet' : ''}">${esc(when)}</div><div class="body ${cls}"><h3>${esc(v.title)}</h3>${v.lines.map(l => `<p>${esc(l)}</p>`).join('')}</div>`;
       }).join('');
-      $('storyCount').textContent = `${narratives.size} update${narratives.size === 1 ? '' : 's'} from the Narrator`;
+      $('storyCount').textContent = `${items.length} update${items.length === 1 ? '' : 's'} from the Narrator`;
+    }
+
+    // ---- AI summary of the charts: the Narrator's latest chart briefing --------------
+    // Written at 15', half-time, 60' and full time from the same numbers the
+    // charts draw (no public on-demand AI endpoint, so nobody can run up costs).
+    let aiOpen = false;
+    $('aiBtn').addEventListener('click', () => {
+      aiOpen = !aiOpen;
+      $('aiBtn').setAttribute('aria-expanded', String(aiOpen));
+      $('aiBtn').textContent = aiOpen ? 'Hide summary' : 'Summarise these charts';
+      renderAiBox();
+    });
+    function renderAiBox() {
+      const box = $('aiBox');
+      box.hidden = !aiOpen;
+      if (!aiOpen) return;
+      const briefs = [...narratives.values()].filter(n => n.kind === 'brief');
+      const b = briefs[briefs.length - 1];
+      if (!b) { box.innerHTML = '<p>The first AI summary of the charts arrives at 15 minutes.</p>'; return; }
+      const v = b.variants[`analyst-${lang()}`] || b.variants['analyst-en'] || Object.values(b.variants)[0];
+      box.innerHTML = `<h3>${esc(v.title)}</h3>${v.lines.map(l => `<p>${esc(l)}</p>`).join('')}<small>Written by the Narrator agent at ${esc(b.show_at)} from the numbers in these charts. Refreshed at 15', half-time, 60' and full time.</small>`;
     }
 
     // ---- charts (analyst) -------------------------------------------------------------
@@ -923,7 +1038,11 @@
     }
     async function connect() {
       if (location.protocol !== 'file:' && !FORCE_LOCAL) {
-        try { const { url } = await (await fetch(NEGOTIATE_URL)).json(); return openSocket(url); }
+        try {
+          const { url, snapshot } = await (await fetch(NEGOTIATE_URL)).json();
+          if (snapshot?.catchup && !gotData) applyCatchup(snapshot.catchup);  // the match so far, at once
+          return openSocket(url);
+        }
         catch (e) { return setTimeout(connect, 1500); }
       }
       openSocket(LOCAL_PREVIEW_WS);
@@ -943,9 +1062,9 @@
         [40, () => to('.p-lineups')], [52, () => top()],
         [60, () => { setMode('analyst'); tab('xg'); }], [72, () => tab('wp')], [82, () => tab('ppda')],
         [92, () => { set('focus'); tab('profile'); }], [104, () => { set('metric', 'player_passing'); tab('zones'); }],
-        [114, () => tab('hard')], [124, () => { set('lang', 'de'); to('.p-stats'); }],
+        [114, () => { tab('hard'); if (!aiOpen) $('aiBtn').click(); }], [124, () => { set('lang', 'de'); to('.p-stats'); }],
         [136, () => { top(); set('lang', 'en'); tab('shots'); }],
-        [146, () => { setMode('casual'); set('focus', ''); set('metric', ''); }],
+        [146, () => { setMode('casual'); set('focus', ''); set('metric', ''); if (aiOpen) $('aiBtn').click(); }],
       ];
       const LOOP = 160;
       let start = null, done = new Set(), loop = 0, finished = false;

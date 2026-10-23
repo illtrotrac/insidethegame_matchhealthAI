@@ -32,6 +32,39 @@ class InMemoryStore:
         return [d for d in self._data.values() if "trigger" in d]
 
 
+# The latest catch-up snapshot, one document in its own partition, so the
+# negotiate service can hand a new viewer the whole match so far with their
+# connection token instead of a blank page until the next catch-up.
+LIVE_PARTITION = "live"
+_container = None
+
+
+def _live_container():
+    global _container
+    if _container is None:
+        from azure.cosmos import CosmosClient
+        from azure.identity import DefaultAzureCredential
+
+        client = CosmosClient(os.environ["COSMOS_ENDPOINT"], DefaultAzureCredential())
+        db = client.get_database_client(os.environ.get("COSMOS_DATABASE", "matchhealth"))
+        _container = db.get_container_client(os.environ.get("COSMOS_CONTAINER", "moments"))
+    return _container
+
+
+def save_live_snapshot(catchup: dict) -> None:
+    import time
+    _live_container().upsert_item({"id": "latest", "match_id": LIVE_PARTITION,
+                                   "saved_at": time.time(), "catchup": catchup})
+
+
+def load_live_snapshot() -> dict | None:
+    try:
+        doc = _live_container().read_item("latest", partition_key=LIVE_PARTITION)
+    except Exception:
+        return None
+    return {"saved_at": doc.get("saved_at"), "catchup": doc.get("catchup")}
+
+
 class CosmosStore:
     """One document per moment, partitioned by match id. Each stage is a field."""
 

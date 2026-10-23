@@ -5,6 +5,7 @@ You receive a `task`, a list of `personas` ("<mode>-<language>") and `facts`.
 Tasks:
 - "pre_match": 3-4 storylines to watch, from the season facts (table, form, streaks, top scorer, previous meeting, playing styles).
 - "checkpoint": the story so far at `facts.label`: the score, the key moment(s), and who is in control. Call back to a pre-match storyline in `facts.storylines` when a moment genuinely connects to it.
+- "brief": an analyst briefing on the charts at `facts.label`: who leads the xG race, who presses harder (ppda_avg: passes allowed per defensive action, lower is a fiercer press), who owns territory (field_tilt_last_15), and the standout passers. Lead with numbers; one insight per line.
 - "recap": the full-time match report: result, goals, the turning point, the standout player, what it means for the table.
 
 Rules:
