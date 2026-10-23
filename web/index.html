@@ -567,6 +567,7 @@
     }
 
     /* ---- design pass: the match pulse + type ------------------------------ */
+    .next-kickoff { color: var(--ink); border-color: var(--control); }
     .ribbon { display: block; width: 100%; height: 120px; margin: 4px 0 12px; }
     .ribbon-axis { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
     .ribbon-half { stroke: var(--border); stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
@@ -611,6 +612,7 @@
         <span id="teamA">—</span><span class="score" id="score">–</span><span id="teamB">—</span>
         <span class="clock" id="clock">00:00</span>
         <span class="clock" id="matchweek" hidden></span>
+        <span class="clock next-kickoff" id="nextKickoff" hidden></span>
       </div>
       <div class="controls">
         <label>Mode <select id="mode"><option>casual</option><option>analyst</option></select></label>
@@ -1012,7 +1014,7 @@
       if (msg.ratings) updateRatings(msg.ratings);
       if (msg.win_draw_loss) updateWdl(msg.win_draw_loss);
       if (msg.shots) updateShotMap(msg.shots);
-      mergePassStats(msg.player_passes);
+      if (msg.player_passes) mergePassStats(msg.player_passes);
       lastHealth = msg;
       renderMetricPin();
       recordPulse(msg);
@@ -1336,6 +1338,8 @@
     // re-sent periodically for late joiners -- see run.py's season_msg.
     function updateSeason(msg) {
       const { season, fixture } = msg;
+      noteFixture(fixture);
+      if (!msg.status) showNextKickoff('live');  // a kickoff message: a new match is live
       const live = [fixture.home, fixture.away];
       const mw = document.getElementById('matchweek');
       mw.textContent = `Matchweek ${fixture.matchweek}`;
@@ -1387,8 +1391,58 @@
         `${narratives.size} update${narratives.size === 1 ? '' : 's'}`;
     }
 
+    // Catch-up snapshot (run.py's send_catchup): everything so far, so a
+    // viewer who opens the page mid-match or after full time sees it all.
+    let currentFixture = null;
+    function fixtureKey(f) { return `${f.matchweek}:${f.home}:${f.away}`; }
+    function resetForNewMatch() {
+      teamNames = null; lastHealth = null; lastMsg = null;
+      pulse = []; pulseGoals = []; lastScore = null;
+      narratives.clear(); playerStats.clear(); activityCount = 0;
+      document.getElementById('activityList').replaceChildren();
+      document.getElementById('storyList').replaceChildren();
+      document.getElementById('activityCount').textContent = '0 decisions';
+    }
+    function noteFixture(fixture) {
+      const key = fixtureKey(fixture);
+      if (currentFixture && currentFixture !== key) resetForNewMatch();
+      currentFixture = key;
+    }
+    let kickoffTimer = null;
+    function showNextKickoff(status, seconds) {
+      const el = document.getElementById('nextKickoff');
+      clearInterval(kickoffTimer);
+      if (status !== 'full_time') { el.hidden = true; return; }
+      el.hidden = false;
+      if (seconds == null) { el.textContent = 'Full time'; return; }
+      const end = Date.now() + seconds * 1000;
+      const tick = () => {
+        const left = Math.max(0, Math.round((end - Date.now()) / 1000));
+        el.textContent = left > 0
+          ? `Full time. Next match in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`
+          : 'Next match starting';
+      };
+      tick();
+      kickoffTimer = setInterval(tick, 1000);
+    }
+    function applyCatchup(c) {
+      noteFixture(c.fixture);
+      updateSeason(c);
+      if (c.health) updateHealth(c.health);
+      if (c.pulse && teamNames && c.pulse.length >= pulse.length) {
+        pulse = c.pulse.map(([min, a, b]) => ({ min, a, b }));
+        pulseGoals = c.goals.map(([min, team]) => ({ min, team }));
+        drawPulse();
+      }
+      c.narratives.forEach(n => narratives.set(n.id, n));
+      renderStory();
+      if (c.last_overlay && !lastMsg) { lastMsg = c.last_overlay; }
+      showNextKickoff(c.status, c.next_kickoff_in_s);
+    }
+
     function onMessage(raw) {
       const msg = JSON.parse(raw);
+      if (msg.catchup) { applyCatchup(msg.catchup); return; }
       if (msg.narrative) { addNarrative(msg.narrative); return; }
       if (msg.narratives) { msg.narratives.forEach(n => narratives.set(n.id, n)); renderStory(); return; }
       if (msg.season) { updateSeason(msg); return; }

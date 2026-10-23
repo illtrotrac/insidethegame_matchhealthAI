@@ -24,12 +24,15 @@ from matchhealth.replay.season import season_context
 from matchhealth.shared.models import clock
 from matchhealth.shared.state import InMemoryStore, StateStore
 
-HEALTH_TICK_EVERY = 5  # publish a live control/chaos snapshot every N events
-SEASON_RESEND_EVERY = 300  # ~13 match-minutes; the ~2.5KB season context rarely changes
+HEALTH_TICK_S = 30.0   # match-seconds between live control/chaos snapshots
+HEAVY_EVERY = 4        # per-player passes + shot map ride on every 4th tick (message size)
+CATCHUP_EVERY_S = 60.0  # real seconds between catch-up snapshots for viewers who join late
+INTERMISSION_RESEND_S = 20.0
 
 
 async def main(seed: int, speed: float, preview: bool = False,
-               home_club: str | None = None, away_club: str | None = None) -> StateStore:
+               home_club: str | None = None, away_club: str | None = None,
+               intermission_s: float = 0.0) -> StateStore:
     cfg = MatchConfig(seed=seed, home=home_club, away=away_club)
     events = generate_match(cfg)
     home, away = cfg.teams
@@ -77,7 +80,10 @@ async def main(seed: int, speed: float, preview: bool = False,
         publishers.append(webpubsub_publisher())
         raw_send = webpubsub_health_sender()
 
+    last_overlay: dict = {}
+
     async def publish(base, variants) -> None:
+        last_overlay.update(base=base.to_wire(), variants=[v.to_wire() for v in variants])
         for p in publishers:
             await p(base, variants)
 
@@ -105,23 +111,48 @@ async def main(seed: int, speed: float, preview: bool = False,
         if ev.outcome == "success":
             entry["completions"] += 1
 
-    async def send_health(t: float) -> None:
+    # Everything a viewer who arrives late needs to see the whole match so far.
+    pulse: list[list[float]] = []   # [minute, home control, away control] per tick
+    goals: list[list] = []          # [minute, team]
+    health_count = 0
+    last_health: dict = {}
+
+    def health_payload(t: float, heavy: bool) -> dict:
         snap = detector.engine.snapshot()
         ratings = detector.match_stats(t)
         xg = {t2: ratings[t2]["xg"] for t2 in (home.name, away.name)}
-        await raw_send({
+        msg = {
             "show_at": clock(t),
             "teams": {t2: snap[t2].model_dump() for t2 in (home.name, away.name)},
             "ratings": ratings,
             "win_draw_loss": win_draw_loss(home.name, away.name, score, xg, t),
             "score": dict(score),
-            "player_passes": player_passes,
-            "shots": detector.shots(),
-        })
+        }
+        if heavy:
+            msg.update(player_passes=player_passes, shots=detector.shots())
+        return msg
+
+    async def send_health(t: float) -> None:
+        nonlocal health_count
+        msg = health_payload(t, heavy=health_count % HEAVY_EVERY == 0)
+        health_count += 1
+        pulse.append([round(t / 60, 2), msg["teams"][home.name]["control"],
+                      msg["teams"][away.name]["control"]])
+        last_health.update(msg)
+        await raw_send(msg)
+
+    async def send_catchup(status: str, next_kickoff_in_s: float | None = None) -> None:
+        t = pulse[-1][0] * 60 if pulse else 0.0
+        await raw_send({"catchup": {
+            **season_msg, "status": status, "next_kickoff_in_s": next_kickoff_in_s,
+            "health": {**last_health, **health_payload(t, heavy=True)} if last_health else None,
+            "pulse": pulse, "goals": goals, "narratives": narrator.log,
+            "last_overlay": last_overlay or None,
+        }})
 
     if raw_send:
         # Team names/clock otherwise sit blank until the first periodic tick
-        # (every HEALTH_TICK_EVERY events) -- send one immediately at kickoff
+        # (every HEALTH_TICK_S match-seconds) -- send one immediately at kickoff
         # so a freshly-connected viewer isn't staring at placeholders.
         await raw_send(season_msg)
         await send_health(0.0)
@@ -136,11 +167,13 @@ async def main(seed: int, speed: float, preview: bool = False,
     # model writes; the recap waits for them so the story stays in order.
     checkpoints = list(CHECKPOINTS)
     narrator_tasks: list[asyncio.Task] = []
-    tick = 0
+    next_tick_t = HEALTH_TICK_S
+    last_catchup = time.monotonic()
     async for ev in replay(events, speed=speed):
         record_pass(ev)
         if ev.type == "goal":
             score[ev.team] += 1
+            goals.append([round(ev.t / 60, 2), ev.team])
             if raw_send:
                 await send_health(ev.t)  # don't wait for the next periodic tick on a goal
         for trig in detector.process(ev):
@@ -152,16 +185,26 @@ async def main(seed: int, speed: float, preview: bool = False,
             label = checkpoints.pop(0)[1]
             narrator_tasks.append(asyncio.create_task(
                 narrator.checkpoint(label, ev.t, live(ev.t))))
-        tick += 1
-        if raw_send and tick % HEALTH_TICK_EVERY == 0:
+        if raw_send and ev.t >= next_tick_t:
             await send_health(ev.t)
-        if raw_send and tick % SEASON_RESEND_EVERY == 0:
-            await raw_send(season_msg)  # so viewers who join mid-match get it too
-            if narrator.log:
-                await raw_send({"narratives": narrator.log})
+            next_tick_t = ev.t + HEALTH_TICK_S
+        if raw_send and time.monotonic() - last_catchup >= CATCHUP_EVERY_S:
+            await send_catchup("live")
+            last_catchup = time.monotonic()
     await asyncio.gather(*narrator_tasks)
     await narrator.recap(live(5400.0))
     print(f"Full time. {len(store.moments())} moments produced. Final score: {score}")
+    if raw_send:
+        await send_health(5400.0)
+        # Intermission: keep the finished match (recap, pulse, table) on screen
+        # for anyone who opens the page before the next kickoff.
+        end = time.monotonic() + intermission_s
+        while True:
+            remaining = end - time.monotonic()
+            await send_catchup("full_time", max(0.0, remaining) if intermission_s else None)
+            if remaining <= 0:
+                break
+            await asyncio.sleep(min(INTERMISSION_RESEND_S, remaining))
     if preview_server:
         await preview_server.close()
     return store
@@ -179,6 +222,9 @@ def cli() -> None:
     p.add_argument("--home", help="Home club, full or partial name (e.g. kingsmere); "
                                   "use with --away. Omit both to let the seed pick a fixture")
     p.add_argument("--away", help="Away club, full or partial name")
+    p.add_argument("--intermission", type=float, default=0,
+                   help="Seconds to keep re-broadcasting the finished match (recap, pulse, "
+                        "table) with a countdown, e.g. until the scheduled demo's next kickoff")
     p.add_argument("--list-clubs", action="store_true", help="Print the league's clubs and exit")
     args = p.parse_args()
     if args.list_clubs:
@@ -192,7 +238,8 @@ def cli() -> None:
     if args.seed is None:
         print(f"No --seed given, using {seed} (changes every run, e.g. for the scheduled demo job)")
     try:
-        asyncio.run(main(seed, args.speed, args.preview, args.home, args.away))
+        asyncio.run(main(seed, args.speed, args.preview, args.home, args.away,
+                         args.intermission))
     except ValueError as exc:  # unknown/ambiguous club, or a club playing itself
         p.error(str(exc))
 
