@@ -192,6 +192,7 @@
       display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: .74rem; color: var(--ink-dim);
       margin-top: 10px; padding: 6px 10px; border: 1px dashed var(--focus); border-radius: 6px;
     }
+    .team-filter-note[hidden] { display: none; }  /* display:flex above would override [hidden] */
     .team-filter-note button {
       background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 999px; color: var(--ink-dim);
       font: inherit; font-size: .7rem; padding: 3px 10px; cursor: pointer; margin-left: auto;
@@ -307,10 +308,18 @@
     }
     .player-stat-badges { display: flex; gap: 5px; flex-shrink: 0; font-size: .8rem; }
     .player-stat-metrics {
-      display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
-      flex-shrink: 0; font-size: .7rem; font-variant-numeric: tabular-nums;
-      color: var(--ink-dim); min-width: 68px; margin-right: 4px;
+      display: flex; align-items: baseline; gap: 14px; flex-shrink: 0;
+      font-size: .86rem; font-variant-numeric: tabular-nums; color: var(--ink);
+      margin-right: 6px;
     }
+    .player-stat-badges { min-width: 44px; justify-content: flex-end; }  /* keeps number columns aligned */
+    .pm-passes { min-width: 54px; text-align: right; }
+    .pm-acc { min-width: 40px; text-align: right; font-weight: 700; }
+    .player-stat-row.header {
+      font-size: .72rem; color: var(--ink-dim); padding-top: 0; border-top: none;
+    }
+    .player-stat-row.header .player-stat-name, .player-stat-row.header .player-stat-metrics,
+    .player-stat-row.header .pm-acc { font-weight: 500; color: var(--ink-dim); font-size: .72rem; }
     .player-stat-row.focused {
       background: rgba(196,181,253,.1); margin-inline: -8px; padding-inline: 8px;
       border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(196,181,253,.4);
@@ -615,7 +624,7 @@
         <span class="clock next-kickoff" id="nextKickoff" hidden></span>
       </div>
       <div class="controls">
-        <label>Mode <select id="mode"><option>casual</option><option>analyst</option></select></label>
+        <label>Mode <select id="mode"><option value="casual">Casual</option><option value="analyst">Analyst</option></select></label>
         <label>Language <select id="lang">
           <option value="en">English</option><option value="es">Español</option>
           <option value="fr">Français</option><option value="pt">Português</option>
@@ -1299,8 +1308,8 @@
               const p = e.passes || { attempts: 0, completions: 0 };
               const acc = p.attempts ? Math.round(100 * p.completions / p.attempts) : null;
               return `<div class="player-stat-metrics">
-                <span>${p.completions}/${p.attempts} passes</span>
-                <span>${acc != null ? acc + '% acc' : '—'}</span>
+                <span class="pm-passes">${p.completions}/${p.attempts}</span>
+                <span class="pm-acc">${acc != null ? acc + '%' : '—'}</span>
               </div>`;
             })() : '';
             return `<div class="${cls}">
@@ -1313,8 +1322,12 @@
       const toggleHtml = (!isAnalyst && rows.length > PLAYER_STATS_CAP)
         ? `<button class="show-all-btn" id="playerStatsToggle">${capped ? `Show all ${rows.length}` : 'Show less'}</button>`
         : '';
+      const headerHtml = isAnalyst ? `<div class="player-stat-row header">
+          <div class="player-stat-name">Player</div><div class="player-stat-team">Team</div>
+          <div class="player-stat-metrics"><span class="pm-passes">Passes</span>
+          <span class="pm-acc">Acc.</span></div><div class="player-stat-badges"></div></div>` : '';
       document.getElementById('playerStatsList').innerHTML = rows.length
-        ? rowsHtml + toggleHtml
+        ? headerHtml + rowsHtml + toggleHtml
         : '<div class="empty-note">Nobody\'s made the news yet…</div>';
       const toggleBtn = document.getElementById('playerStatsToggle');
       if (toggleBtn) {
@@ -1399,6 +1412,9 @@
       teamNames = null; lastHealth = null; lastMsg = null;
       pulse = []; pulseGoals = []; lastScore = null;
       narratives.clear(); playerStats.clear(); activityCount = 0;
+      seenPlayers.clear();  // the Focus list too, or old squads pile up in it
+      const focus = document.getElementById('focus');
+      while (focus.options.length > 1) focus.remove(1);
       document.getElementById('activityList').replaceChildren();
       document.getElementById('storyList').replaceChildren();
       document.getElementById('activityCount').textContent = '0 decisions';
@@ -1459,8 +1475,49 @@
       ws.onclose = () => setTimeout(connect, 1500);
     }
 
+    // ?autopilot walks the real UI through the demo-video scenes on a timer
+    // (casual -> tables -> analyst -> Deutsch -> player focus -> pinned metric
+    // -> back), looping, and brings the recap into view at full time.
+    if (new URLSearchParams(location.search).has("autopilot")) {
+      document.documentElement.style.scrollbarWidth = "none";  // clean frames for recording
+      const set = (id, value) => {
+        const el = document.getElementById(id);
+        if (value === undefined) value = el.options[Math.min(1, el.options.length - 1)].value;
+        el.value = value; el.dispatchEvent(new Event("change"));
+      };
+      const to = sel => document.querySelector(sel).scrollIntoView({ behavior: "smooth", block: "start" });
+      const SCENES = [
+        [0, () => { set("mode", "casual"); set("lang", "en"); set("focus", ""); set("metric", ""); scrollTo({ top: 0, behavior: "smooth" }); }],
+        [45, () => to(".league-panel")],
+        [55, () => scrollTo({ top: 0, behavior: "smooth" })],
+        [62, () => set("mode", "analyst")],
+        [72, () => set("lang", "de")],
+        [82, () => set("focus")],
+        [88, () => set("metric", "player_passing")],
+        [98, () => set("metric", "win_prob")],
+        [106, () => to(".league-panel")],
+        [116, () => { set("lang", "fr"); scrollTo({ top: 0, behavior: "smooth" }); }],
+        [124, () => { set("lang", "en"); set("mode", "casual"); set("focus", ""); set("metric", ""); }],
+      ];
+      const LOOP_S = 130;
+      let start = null, done = new Set(), loop = 0;
+      setInterval(() => {
+        if (!teamNames) return;
+        start ??= Date.now();
+        const t = (Date.now() - start) / 1000 - loop * LOOP_S;
+        if (t >= LOOP_S) { loop++; done = new Set(); return; }
+        SCENES.forEach(([at, fn], i) => { if (t >= at && !done.has(i)) { done.add(i); fn(); } });
+        if (narratives.has("n-recap") && !done.has("recap")) {
+          done.add("recap"); set("mode", "casual"); set("lang", "en"); to(".story-panel");
+        }
+      }, 500);
+    }
+
+    // ?local forces the local preview socket even when served over http
+    // (e.g. a localhost server for recording), instead of the live Azure feed.
+    const FORCE_LOCAL = new URLSearchParams(location.search).has("local");
     async function connect() {
-      if (location.protocol !== "file:") {
+      if (location.protocol !== "file:" && !FORCE_LOCAL) {
         try {
           const res = await fetch(NEGOTIATE_URL);
           const { url } = await res.json();
