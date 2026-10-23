@@ -1,0 +1,28 @@
+location: eastus2
+identity:
+  type: SystemAssigned
+properties:
+  environmentId: <ENV_ID>  # az containerapp env show -n matchhealth-env -g matchhealth-rg --query id -o tsv
+  configuration:
+    triggerType: Schedule
+    replicaTimeout: 1190
+    replicaRetryLimit: 0
+    scheduleTriggerConfig:
+      cronExpression: "*/20 * * * *"
+      parallelism: 1
+      replicaCompletionCount: 1
+  template:
+    containers:
+      - name: matchhealth-demo
+        image: ghcr.io/illtrotrac/matchhealthai:latest
+        command: ["python", "-m", "matchhealth.run", "--speed", "6", "--intermission", "180"]
+        resources:
+          cpu: 0.25
+          memory: 0.5Gi
+        env:
+          - {name: MATCHHEALTH_MOCK_LLM, value: "1"}
+          - {name: COSMOS_ENDPOINT, value: "https://matchhealth-cosmos.documents.azure.com:443/"}
+          - {name: COSMOS_DATABASE, value: matchhealth}
+          - {name: COSMOS_CONTAINER, value: moments}
+          - {name: WEBPUBSUB_ENDPOINT, value: "https://matchhealth-pubsub.webpubsub.azure.com"}
+          - {name: WEBPUBSUB_HUB, value: overlays}
