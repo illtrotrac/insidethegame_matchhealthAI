@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from matchhealth.agents.llm import LLMClient, load_prompt, mock_enabled
+from matchhealth.agents.mock_text import overlay_text
 from matchhealth.shared.models import Explanation, Overlay, Trigger, clock
 
 PRIORITY = {"goal": 1, "big_chance": 1, "control_swing": 2, "pressing_spell": 2,
@@ -103,24 +104,21 @@ class Personaliser:
     def __init__(self, llm: LLMClient | None) -> None:
         self.llm = llm
 
-    async def run(self, base: Overlay, personas: list[dict]) -> list[Overlay]:
+    async def run(self, base: Overlay, personas: list[dict],
+                  trig: Trigger | None = None) -> list[Overlay]:
         if mock_enabled() or self.llm is None:
+            # Hand-written templates per language (mock_text.py), built from
+            # the moment's facts -- real translations, not word swaps.
             variants = []
             for p in personas:
-                mode = p.get("mode", "base")
-                head = base.headline
-                if mode == "casual":
-                    head = _casualize(head)
-                elif mode == "analyst":
-                    head = _analystify(head, base.stats)
-                lang = p.get("language", "en")
-                if lang == "es":
-                    head = _translate_es(head)
-                elif lang != "en":
-                    head = f"[{lang}] {head}"
+                mode, lang = p.get("mode", "base"), p.get("language", "en")
+                head, sub = base.headline, base.subline
+                if trig is not None:
+                    head, sub = overlay_text(trig.kind, trig.team, trig.player, trig.facts,
+                                             mode, lang)
                 variants.append(base.model_copy(update={
-                    "headline": head[:80], "mode": mode,
-                    "language": p.get("language", "en")}))
+                    "headline": head[:80], "subline": sub[:90] if sub else None,
+                    "mode": mode, "language": lang}))
             return variants
         data = await self.llm.complete_json(
             load_prompt("personaliser"),
@@ -131,93 +129,6 @@ class Personaliser:
 
 
 # --- helpers ---------------------------------------------------------------
-
-_CASUAL_SWAPS = [
-    ("have seized control", "are running the show"),
-    ("scores for", "nets one for"),
-    ("Big chance for", "Huge chance for"),
-    ("shot quality", "chance quality"),
-    ("press is breaking", "press is wrecking"),
-    ("Rocket from", "Screamer from"),
-    ("is shown a yellow card for", "picks up a yellow for"),
-    ("is shown a red card for", "sees red for"),
-    ("threads a", "slices open the defense with a"),
-]
-
-
-def _casualize(headline: str) -> str:
-    """mode='casual': plain, energetic, no jargon (see prompts/personaliser.md).
-    Guaranteed to visibly differ from the base headline even when none of the
-    swap phrases match -- the fallback was a bare substring match that quietly
-    never fired for most mock headlines, so casual/analyst looked identical."""
-    for old, new in _CASUAL_SWAPS:
-        if old in headline:
-            return headline.replace(old, new)
-    return headline.rstrip(".") + "!"
-
-
-def _analystify(headline: str, stats: list) -> str:
-    """mode='analyst': precise, tactical, keep numbers -- surface the leading
-    stat inline so the headline reads as data-backed, not just restyled."""
-    for s in stats:
-        if s.value is not None:
-            value = int(s.value) if isinstance(s.value, float) and s.value.is_integer() else s.value
-            out = f"{headline.rstrip('.')} ({s.label}: {value})"
-        elif s.from_ is not None and s.to is not None:
-            out = f"{headline.rstrip('.')} ({s.from_}->{s.to})"
-        else:
-            continue
-        # Only if it fits: Personaliser truncates to 80, which cut stats mid-bracket
-        return out if len(out) <= 80 else headline
-    return headline
-
-# Deterministic phrase substitution over this project's own fixed mock-mode
-# vocabulary -- NOT a real translator. The real-LLM Personaliser path
-# (prompts/personaliser.md) does genuine translation; this only exists so
-# mock mode (MATCHHEALTH_MOCK_LLM=1, including the scheduled judging-period
-# job) shows actual Spanish text instead of an English headline with a
-# "[es]" tag stapled to the front.
-_ES_SWAPS = [
-    ("is shown a yellow card for", "ve tarjeta amarilla por"),
-    ("picks up a yellow for", "recibe amarilla por"),
-    ("is shown a red card for", "ve tarjeta roja por"),
-    ("sees red for", "ve la roja por"),
-    ("a late challenge", "una entrada tardía"),
-    ("a reckless tackle", "una entrada temeraria"),
-    ("a mistimed challenge", "una entrada mal calculada"),
-    ("a foul in the build-up", "una falta en la jugada"),
-    ("a shirt pull", "un tirón de camiseta"),
-    ("a trip", "una zancadilla"),
-    ("Free kick to", "Tiro libre para"),
-    ("Big chance for", "Gran ocasión para"),
-    ("Huge chance for", "Ocasión enorme para"),
-    ("shot quality", "calidad de tiro"),
-    ("chance quality", "calidad de ocasión"),
-    ("have seized control", "han tomado el control"),
-    ("are running the show", "dominan el partido"),
-    ("Control score up from", "Puntuación de control sube de"),
-    ("press is wrecking", "presión está destrozando"),
-    ("press is breaking", "presión está rompiendo"),
-    ("the opponent's rhythm", "el ritmo del rival"),
-    ("turnovers in 5 minutes", "pérdidas forzadas en 5 minutos"),
-    ("Rocket from", "Misil de"),
-    ("Screamer from", "Golazo de"),
-    ("slices open the defense with a", "abre la defensa con un"),
-    ("threads a", "envía un"),
-    ("pass for", "pase para"),
-    ("under pressure", "bajo presión"),
-    ("difficulty", "dificultad"),
-    ("nets one for", "marca para"),
-    ("scores for", "anota para"),
-    ("against", "contra"),
-]
-
-
-def _translate_es(text: str) -> str:
-    for old, new in _ES_SWAPS:
-        text = text.replace(old, new)
-    return text
-
 
 def _template_for(trig: Trigger) -> str:
     return {"big_chance": "big_chance", "goal": "big_chance",

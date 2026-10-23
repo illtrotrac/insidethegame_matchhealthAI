@@ -22,6 +22,7 @@ from collections import Counter
 from collections.abc import Awaitable, Callable
 
 from matchhealth.agents.llm import LLMClient, load_prompt, mock_enabled
+from matchhealth.agents.mock_text import KINDS, NARRATIVE, POINTS, SEP, lang_of, ordinal
 from matchhealth.shared.models import Trigger, clock
 from matchhealth.shared.state import StateStore
 
@@ -195,157 +196,107 @@ def _positions_after(table: list[dict], home: str, away: str, h: int, a: int) ->
 
 # --- deterministic texts (mock mode + fallback) ---------------------------------
 # Same facts as the model gets, rendered per mode ("casual" | "analyst") and
-# language ("en" | "es"). Other languages fall back to English.
-
-def _ord(n: int, lang: str) -> str:
-    return f"{n}.º" if lang == "es" else {1: "1st", 2: "2nd", 3: "3rd"}.get(n, f"{n}th")
-
-
-KIND_TEXT = {
-    "en": {"goal": "goal", "big_chance": "big chance", "control_swing": "momentum swing",
-           "pressing_spell": "pressing spell", "speed_milestone": "thunderbolt shot",
-           "foul": "card", "pass_quality": "pass under pressure"},
-    "es": {"goal": "gol", "big_chance": "gran ocasión", "control_swing": "cambio de dominio",
-           "pressing_spell": "fase de presión", "speed_milestone": "disparo potentísimo",
-           "foul": "tarjeta", "pass_quality": "pase bajo presión"},
-}
-CHECKPOINT_LABEL_ES = {"15'": "Minuto 15", "Half-time": "Descanso", "60'": "Minuto 60"}
+# language from the hand-written templates in mock_text.py.
 
 
 def _pre_match_text(f: dict, mode: str, lang: str) -> dict:
-    es, analyst = lang == "es", mode == "analyst"
+    lang = lang_of(lang)
+    T, analyst = NARRATIVE[lang], mode == "analyst"
     H, A = f["home"], f["away"]
     gap = abs(H["points"] - A["points"])
     lines = []
     if analyst:
-        def table_line(T: dict) -> str:
-            if es:
-                return (f"{T['team']}: {_ord(T['position'], lang)} con {T['points']} pts "
-                        f"(xG {T['xg_for']:.1f} a favor, {T['xg_against']:.1f} en contra).")
-            return (f"{T['team']}: {_ord(T['position'], lang)} on {T['points']} pts "
-                    f"(xG {T['xg_for']:.1f} for, {T['xg_against']:.1f} against).")
-        lines.append(f"{table_line(H)} {table_line(A)}")
-    elif es:
-        lines.append(f"{H['team']} ({_ord(H['position'], lang)}) recibe a {A['team']} "
-                     f"({_ord(A['position'], lang)}); les separa{'n' if gap != 1 else ''} "
-                     f"{gap} punto{'s' if gap != 1 else ''}.")
+        lines.append(" ".join(T["pm_team"].format(
+            team=X["team"], pos=ordinal(X["position"], lang), posn=X["position"], pts=X["points"],
+            xf=f"{X['xg_for']:.1f}", xa=f"{X['xg_against']:.1f}") for X in (H, A)))
     else:
-        lines.append(f"{H['team']} ({_ord(H['position'], lang)}) host {A['team']} "
-                     f"({_ord(A['position'], lang)}), {gap} point{'s' if gap != 1 else ''} "
-                     f"apart in the table.")
+        lines.append(T["pm_table"].format(
+            h=H["team"], hp=ordinal(H["position"], lang), a=A["team"],
+            ap=ordinal(A["position"], lang), hpn=H["position"], apn=A["position"], gap=gap,
+            points=POINTS[lang][gap != 1]))
 
-    runs = [(T["unbeaten_run"], "unbeaten", T) for T in (H, A) if T["unbeaten_run"] >= 3]
-    runs += [(T["winless_run"], "winless", T) for T in (H, A) if T["winless_run"] >= 3]
+    runs = [(X["unbeaten_run"], "unbeaten", X) for X in (H, A) if X["unbeaten_run"] >= 3]
+    runs += [(X["winless_run"], "winless", X) for X in (H, A) if X["winless_run"] >= 3]
     if runs:
-        n, what, T = max(runs, key=lambda r: r[0])
-        lines.append({
-            ("en", "unbeaten", False): f"{T['team']} are unbeaten in {n}. Can they keep it going?",
-            ("en", "winless", False): f"{T['team']} haven't won in {n}. Something has to give.",
-            ("en", "unbeaten", True): f"{T['team']}: unbeaten in {n} (form {T['form']}).",
-            ("en", "winless", True): f"{T['team']}: winless in {n} (form {T['form']}).",
-            ("es", "unbeaten", False): f"{T['team']} lleva {n} partidos sin perder. "
-                                       f"¿Seguirá la racha?",
-            ("es", "winless", False): f"{T['team']} suma {n} partidos sin ganar.",
-            ("es", "unbeaten", True): f"{T['team']}: {n} sin perder (forma {T['form']}).",
-            ("es", "winless", True): f"{T['team']}: {n} sin ganar (forma {T['form']}).",
-        }[("es" if es else "en", what, analyst)])
+        n, what, X = max(runs, key=lambda r: r[0])
+        lines.append(T[what + ("_a" if analyst else "")].format(team=X["team"], n=n,
+                                                                 form=X["form"]))
     else:
-        lines.append(f"{'Forma reciente' if es else 'Recent form'}: "
-                     f"{H['team']} {H['form']}, {A['team']} {A['form']}.")
+        lines.append(T["form"].format(h=H["team"], hf=H["form"], a=A["team"], af=A["form"]))
 
-    scorers = [T["top_scorer"] for T in (H, A) if T["top_scorer"]]
+    scorers = [X["top_scorer"] for X in (H, A) if X["top_scorer"]]
     best = max(scorers, key=lambda s: s["goals"]) if scorers else None
     if best and best["goals"] >= 2:
-        p, g, team = best["player"], best["goals"], best["team"]
-        lines.append({
-            ("en", False): f"Watch {p}: {g} goals this season for {team}.",
-            ("en", True): f"{p} ({team}): {g} league goals so far.",
-            ("es", False): f"Atención a {p}: {g} goles esta temporada con {team}.",
-            ("es", True): f"{p} ({team}): {g} goles en liga.",
-        }[("es" if es else "en", analyst)])
-    elif es:
-        lines.append(f"Choque de estilos entre {H['team']} y {A['team']}.")
+        lines.append(T["scorer_a" if analyst else "scorer"].format(
+            p=best["player"], g=best["goals"], team=best["team"]))
     else:
-        lines.append(f"Style clash: {H['style'].lower()} vs {A['style'].lower()}.")
+        lines.append(T["clash"].format(h=H["team"], a=A["team"], hs=H["style"].lower(),
+                                       as_=A["style"].lower()))
 
     prev = f["previous_meeting"]
     if prev:
-        s = prev["score"]
-        lines.append(f"{'En la ida' if es else 'Earlier this season'}: "
-                     f"{prev['home']} {s[0]}-{s[1]} {prev['away']}.")
-    title = (f"Jornada {f['matchweek']}: las claves" if es
-             else f"Matchweek {f['matchweek']}: the storylines")
-    return {"title": title, "lines": lines}
-
-
-def _score_line(f: dict, es: bool) -> str:
-    (H, A), (h, a) = (f["home"], f["away"]), _pair(f, "score")
-    if h == a:
-        return f"Empate a {h}." if es else f"Still level at {h}-{a}."
-    lead, (x, y) = (H, (h, a)) if h > a else (A, (a, h))
-    return f"{lead} gana {x}-{y}." if es else f"{lead} lead {x}-{y}."
+        lines.append(T["prev"].format(home=prev["home"], away=prev["away"], s0=prev["score"][0],
+                                      s1=prev["score"][1], sep=SEP[lang]))
+    return {"title": T["pm_title"].format(mw=f["matchweek"]), "lines": lines}
 
 
 def _checkpoint_text(f: dict, mode: str, lang: str) -> dict:
-    es, analyst = lang == "es", mode == "analyst"
+    lang = lang_of(lang)
+    T, analyst, sep = NARRATIVE[lang], mode == "analyst", SEP[lang]
     H, A, (h, a) = f["home"], f["away"], _pair(f, "score")
-    kinds = KIND_TEXT["es" if es else "en"]
-    lines = [_score_line(f, es)]
+    if h == a:
+        lines = [T["level"].format(h=h, a=a, sep=sep)]
+    else:
+        lead, (x, y) = (H, (h, a)) if h > a else (A, (a, h))
+        lines = [T["lead"].format(team=lead, x=x, y=y, sep=sep)]
     goals = [m for m in f["moments"] if m["kind"] == "goal"]
     if goals:
         g = goals[-1]
-        lines.append(f"Último gol: {g['player']} ({g['team']}) en el {g['clock']}." if es
-                     else f"Latest goal: {g['player']} for {g['team']} at {g['clock']}.")
+        lines.append(T["latest_goal"].format(p=g["player"], team=g["team"], clock=g["clock"]))
     elif f["moments"]:
         m = f["moments"][-1]
-        lines.append(f"Última jugada clave: {kinds[m['kind']]} de {m['team']} en el {m['clock']}."
-                     if es else
-                     f"Latest key moment: {kinds[m['kind']]} for {m['team']} at {m['clock']}.")
+        lines.append(T["latest_moment"].format(kind=KINDS[lang][m["kind"]], team=m["team"],
+                                               clock=m["clock"]))
     else:
-        lines.append("Inicio tranquilo: aún sin jugadas clave." if es
-                     else "A quiet start: no key moments yet.")
+        lines.append(T["quiet"])
     (hc, ac), (hx, ax), (hs, as_) = (_pair(f, k) for k in ("control_score_0_100", "xg", "shots"))
     if analyst:
-        lines.append(f"Control {hc:.0f}–{ac:.0f}, xG {hx:.2f}–{ax:.2f}, "
-                     f"{'tiros' if es else 'shots'} {hs}–{as_}.")
+        lines.append(T["control_a"].format(hc=f"{hc:.0f}", ac=f"{ac:.0f}", hx=f"{hx:.2f}",
+                                           ax=f"{ax:.2f}", hs=hs, as_=as_))
     elif abs(hc - ac) >= 10:
-        top = H if hc > ac else A
-        lines.append(f"{top} domina el juego." if es else f"{top} have had more control.")
+        lines.append(T["on_top"].format(team=H if hc > ac else A))
     else:
-        lines.append("Ningún equipo se ha hecho con el control." if es
-                     else "Neither side has taken control yet.")
-    label = CHECKPOINT_LABEL_ES.get(f["label"], f["label"]) if es else f["label"]
-    return {"title": f"{label}: {H} {h}-{a} {A}", "lines": lines}
+        lines.append(T["even"])
+    label = T["labels"].get(f["label"], f["label"])
+    return {"title": T["cp_title"].format(label=label, h=H, a=A, hg=h, ag=a, sep=sep),
+            "lines": lines}
 
 
 def _recap_text(f: dict, mode: str, lang: str) -> dict:
-    es, analyst = lang == "es", mode == "analyst"
+    lang = lang_of(lang)
+    T, analyst, sep = NARRATIVE[lang], mode == "analyst", SEP[lang]
     H, A, (h, a) = f["home"], f["away"], _pair(f, "score")
     (hc, ac), (hx, ax), (hs, as_) = (_pair(f, k) for k in ("control_score_0_100", "xg", "shots"))
+    v = dict(h=H, a=A, hg=h, ag=a, sep=sep, hx=f"{hx:.2f}", ax=f"{ax:.2f}", hs=hs, as_=as_,
+             hc=f"{hc:.0f}", ac=f"{ac:.0f}")
     if analyst:
-        lines = [f"{H} {h}-{a} {A}, xG {hx:.2f}–{ax:.2f}."]
-    elif h > a:
-        lines = [f"{H} se lleva los tres puntos." if es else f"{H} take all three points."]
-    elif a > h:
-        lines = [f"{A} gana a domicilio." if es else f"{A} win away from home."]
+        lines = [T["ft_a"].format(**v)]
     else:
-        lines = ["Reparto de puntos." if es else "The points are shared."]
+        lines = [T["home_win" if h > a else "away_win" if a > h else "draw"].format(**v)]
     if f["goals"]:
-        scorers = ", ".join(f"{g['player']} {g['clock']}" for g in f["goals"])
-        lines.append(f"{'Goles' if es else 'Goals'}: {scorers}.")
+        lines.append(T["goals"].format(
+            list=", ".join(f"{g['player']} {g['clock']}" for g in f["goals"])))
     else:
-        lines.append("Sin goles." if es else "No goals.")
+        lines.append(T["no_goals"])
     if analyst:
-        lines.append(f"{'Tiros' if es else 'Shots'} {hs}–{as_}, "
-                     f"{'control al final' if es else 'control at the whistle'} {hc:.0f}–{ac:.0f}.")
+        lines.append(T["ft_stats"].format(**v))
     elif f["standout_player"]:
         s = f["standout_player"]
-        lines.append(f"{'Destacado' if es else 'Standout'}: {s['player']} ({s['team']}).")
+        lines.append(T["standout"].format(p=s["player"], team=s["team"]))
     pos = f["table_position_after"]
-    lines.append(f"Clasificación: {H} queda {_ord(pos[H], lang)}, {A} {_ord(pos[A], lang)}."
-                 if es else
-                 f"Table: {H} now {_ord(pos[H], lang)}, {A} {_ord(pos[A], lang)}.")
-    return {"title": f"{'Final' if es else 'Full time'}: {H} {h}-{a} {A}", "lines": lines}
+    lines.append(T["table"].format(h=H, a=A, hp=ordinal(pos[H], lang), ap=ordinal(pos[A], lang),
+                                    hpn=pos[H], apn=pos[A]))
+    return {"title": T["ft_title"].format(**v), "lines": lines}
 
 
 RENDER = {"pre_match": _pre_match_text, "checkpoint": _checkpoint_text, "recap": _recap_text}

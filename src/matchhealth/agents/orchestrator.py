@@ -194,7 +194,8 @@ class PersonaliserExecutor(Executor):
     @handler(input=Produced, workflow_output=Overlay)
     async def run(self, msg: Produced, ctx: WorkflowContext) -> None:
         try:
-            variants = await self.crew.personaliser.run(msg.base, self.crew.personas)
+            variants = await self.crew.personaliser.run(msg.base, self.crew.personas,
+                                                          msg.trig)
         except Exception as exc:
             log.warning("moment %s: personaliser failed (%s); base only",
                         msg.trig.moment_id, exc)

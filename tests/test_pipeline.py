@@ -172,6 +172,19 @@ async def test_narrator_tells_the_whole_story(monkeypatch):
     assert all(m["trigger"]["facts"]["scorer_season_goals"] >= 1 for m in goals)
 
 
+async def test_mock_mode_is_translated_in_every_language(monkeypatch):
+    monkeypatch.setenv("MATCHHEALTH_MOCK_LLM", "1")
+    store = await main(seed=7, speed=0)
+    langs = {p["language"] for p in DEFAULT_PERSONAS}
+    recap = store.get("n-recap")["narrator"]["variants"]
+    titles = {lang: recap[f"casual-{lang}"]["title"] for lang in langs}
+    assert len(set(titles.values())) == len(langs)  # no language falls back to English
+    for m in store.moments():
+        heads = {v["language"]: v["headline"] for v in m["personaliser"] if v["mode"] == "casual"}
+        assert len(set(heads.values())) == len(langs), heads
+        assert not any(h.startswith("[") for h in heads.values())
+
+
 async def test_narrator_falls_back_when_the_model_fails(monkeypatch):
     monkeypatch.setenv("MATCHHEALTH_MOCK_LLM", "0")
 
