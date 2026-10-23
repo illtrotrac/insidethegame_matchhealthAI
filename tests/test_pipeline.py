@@ -187,7 +187,7 @@ async def test_narrator_falls_back_when_the_model_fails(monkeypatch):
                         season_context(7, cfg.matchweek))
     item = await narrator.pre_match()
     assert item["variants"]["casual-en"]["title"] == "Only one"  # model output kept
-    assert len(item["variants"]) == 4  # the rest filled from the facts
+    assert len(item["variants"]) == len(DEFAULT_PERSONAS)  # the rest filled from the facts
     assert store.get("n-pre-match")["recovery"]["reason"] == "incomplete"
     assert store.moments() == []  # narrative docs aren't moments
 

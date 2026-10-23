@@ -34,12 +34,12 @@ ANALYST_TIMEOUT_S = 15.0
 PRODUCER_TIMEOUT_S = 15.0
 SPOTTER_TIMEOUT_S = 10.0
 
-DEFAULT_PERSONAS = [
-    {"mode": "analyst", "language": "en"},
-    {"mode": "casual", "language": "en"},
-    {"mode": "casual", "language": "es"},
-    {"mode": "analyst", "language": "es"},
-]
+# Every mode x language is one persona. The Personaliser and Narrator write
+# all of them in ONE call each, so a language adds output tokens, not calls.
+# Real translations come from the model; mock mode only covers en/es.
+LANGUAGES = ["en", "es", "fr", "pt", "de"]
+DEFAULT_PERSONAS = [{"mode": m, "language": lang}
+                    for lang in LANGUAGES for m in ("casual", "analyst")]
 
 Publish = Callable[[Overlay, list[Overlay]], Awaitable[None]]
 ActivitySend = Callable[[dict], Awaitable[None]]
