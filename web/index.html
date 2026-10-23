@@ -6,39 +6,37 @@
   <title>Match Health overlay</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet">
   <style>
     :root {
-      /* Dark glassmorphism (navy/slate base, green accent) -- picked via
-         `ui-ux-pro-max --design-system "sports analytics dashboard dark mode
-         broadcast overlay"` rather than guessed; its --color-accent (#22C55E)
-         happened to already match this project's --control green, so the
-         existing semantic accents below carry over unchanged. */
-      --bg: #0a0f1a;
-      --panel: rgba(21, 30, 48, .72);
-      --panel-2: rgba(21, 30, 48, .5);
-      --panel-solid: #141d30;  /* solid navy for surfaces that can't be translucent (native <select> popups) */
-      --ink: #f8fafc;
-      --ink-dim: rgba(248, 250, 252, .64);
-      --border: rgba(148, 163, 184, .16);
-      --control: #22c55e;   /* in-possession, calm; also "team A" */
-      --away: #38bdf8;      /* "team B" in the health meter, for a clear vs */
-      --chaos: #f59e0b;     /* pressure, turnovers */
-      --gold: #fbbf24;      /* big moments / priority -- this one meaning only */
-      --info: #38bdf8;      /* comparisons */
-      --muted: #94a3b8;     /* fallback / degraded */
-      --focus: #c4b5fd;     /* "you selected this" -- distinct from gold's priority meaning */
-      --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;  /* broadcast headlines */
-      --mono: 'Fira Code', ui-monospace, 'SFMono-Regular', monospace;  /* all numeric/data */
-      --sans: 'Fira Sans', -apple-system, "Segoe UI", system-ui, sans-serif;  /* body/UI chrome */
+      /* Floodlit pitch at night: turf-ink base, line-paint chalk for text.
+         The two team colours are data (home amber floodlight, away sky);
+         red is reserved for cards and failures. One family (Archivo) --
+         its width axis is the display device: ultra-condensed heavy for
+         scores and headlines, normal width for reading, tabular digits. */
+      --bg: #0d1d1a;
+      --panel: #152b27;
+      --panel-2: #1b3530;
+      --panel-solid: #152b27;
+      --ink: #eceFe4;
+      --ink-dim: rgba(236, 239, 228, .62);
+      --border: rgba(236, 239, 228, .12);
+      --control: #f2a541;   /* home team */
+      --away: #7cc6f2;      /* away team */
+      --chaos: #e5484d;     /* cards, losses, failures */
+      --gold: #f2a541;      /* big moments: same floodlight as home, by design */
+      --info: #7cc6f2;
+      --muted: #8fa39c;     /* fallback / degraded / draw */
+      --focus: #c9f27c;     /* "you selected this" */
+      --win: #6fcf97;
+      --display: 'Archivo', 'Arial Narrow', sans-serif;
+      --mono: 'Archivo', system-ui, sans-serif;  /* numbers use tabular figures, not monospace */
+      --sans: 'Archivo', system-ui, sans-serif;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0; color: var(--ink); font-family: var(--sans);
       background: var(--bg);
-      background-image: radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(34,197,94,.08), transparent 60%),
-        radial-gradient(ellipse 900px 500px at 100% 0%, rgba(56,189,248,.06), transparent 55%);
-      background-attachment: fixed;
       padding-block: 20px 40px;
     }
     .wrap { max-width: 1400px; margin: 0 auto; padding-inline: 16px; }
@@ -61,7 +59,7 @@
     .teams {
       display: flex; align-items: baseline; gap: 10px;
       font-family: var(--display); font-weight: 700; font-size: 1.3rem;
-      letter-spacing: .01em; text-transform: uppercase;
+      letter-spacing: .01em; 
     }
     .teams .score {
       font-variant-numeric: tabular-nums; color: var(--gold); font-size: 1.5rem;
@@ -75,7 +73,7 @@
     .controls { display: flex; gap: 10px; flex-wrap: wrap; }
     .controls label {
       display: flex; align-items: center; gap: 6px; font-size: .72rem;
-      color: var(--ink-dim); text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+      color: var(--ink-dim);   font-weight: 600;
     }
     .controls select {
       background: var(--panel-solid); color: var(--ink); border: 1px solid var(--border);
@@ -95,8 +93,8 @@
       border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px;
     }
     .team-checks-label {
-      font-size: .72rem; color: var(--ink-dim); text-transform: uppercase;
-      letter-spacing: .04em; font-weight: 600;
+      font-size: .72rem; color: var(--ink-dim); 
+       font-weight: 600;
     }
     .team-check {
       display: flex; align-items: center; gap: 5px; font-size: .85rem;
@@ -107,12 +105,11 @@
     /* ---- match health meter: the actual point of this project ---------- */
     .health {
       border: 1px solid var(--border); border-radius: 14px; padding: 14px 18px;
-      margin-bottom: 14px; background: var(--panel); backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px); box-shadow: 0 8px 24px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.04);
+      margin-bottom: 14px; background: var(--panel);
     }
     .health-title {
       display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
-      font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em;
+      font-size: .72rem; font-weight: 600;  
       color: var(--ink-dim); margin-bottom: 10px; position: relative; padding-left: 12px;
     }
     .health-title::before, .activity-title::before {
@@ -204,8 +201,7 @@
 
     .shot-map-wrap {
       display: none; margin-top: 14px; border: 1px solid var(--border); border-radius: 14px;
-      padding: 14px 16px; background: var(--panel); backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px); box-shadow: 0 8px 24px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.04);
+      padding: 14px 16px; background: var(--panel);
     }
     body[data-mode="analyst"] .shot-map-wrap { display: block; }
     .shot-map { width: 100%; height: auto; aspect-ratio: 68/25; border-radius: 8px; display: block; }
@@ -279,13 +275,11 @@
     /* ---- shared panel chrome: player stats + agent activity ------------- */
     .activity-panel, .player-stats-panel, .league-panel, .story-panel {
       border: 1px solid var(--border); border-radius: 14px; background: var(--panel);
-      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-      box-shadow: 0 8px 24px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.04);
       padding: 14px 16px; max-height: 420px; overflow-y: auto;
     }
     .activity-title {
       display: flex; justify-content: space-between; align-items: baseline;
-      font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em;
+      font-size: .72rem; font-weight: 600;  
       color: var(--ink-dim); margin-bottom: 10px; position: relative; padding-left: 12px;
     }
     .activity-panel .activity-title::before { background: var(--focus); }
@@ -412,8 +406,8 @@
     .pitch-lines rect.goal { stroke: rgba(255,255,255,.55); stroke-width: 3.5; }
     .watermark {
       position: absolute; right: 14px; bottom: 10px; z-index: 2;
-      font-family: var(--display); font-weight: 700; letter-spacing: .08em;
-      font-size: .72rem; text-transform: uppercase; color: rgba(255,255,255,.4);
+      font-family: var(--display); font-weight: 700; 
+      font-size: .72rem;  color: rgba(255,255,255,.4);
     }
     /* Ambient player dots: ATMOSPHERE, not tracked data. The synthetic match
        only records one ball/action position per event (see generator.py) --
@@ -508,7 +502,7 @@
     }
     .overlay.visible { opacity: 1; transform: translateY(0); }
     .overlay .tag {
-      font-size: .66rem; text-transform: uppercase; letter-spacing: .08em;
+      font-size: .66rem;  
       color: var(--ink-dim); margin-bottom: 2px; display: flex; gap: 6px; align-items: center;
     }
     .overlay h2 {
@@ -571,6 +565,43 @@
       .overlay { max-width: 90% !important; left: 3% !important; right: auto !important; }
       .health-row .name { width: 110px; }
     }
+
+    /* ---- design pass: the match pulse + type ------------------------------ */
+    .ribbon { display: block; width: 100%; height: 120px; margin: 4px 0 12px; }
+    .ribbon-axis { stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+    .ribbon-half { stroke: var(--border); stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
+    .ribbon-home { fill: color-mix(in srgb, var(--control) 55%, transparent); stroke: var(--control);
+      stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+    .ribbon-away { fill: color-mix(in srgb, var(--away) 45%, transparent); stroke: var(--away);
+      stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+    .ribbon-goal { stroke: var(--bg); stroke-width: 2; }
+    .health-bar { display: none; }
+    .health-row { margin-bottom: 4px; }
+    .health-row .name { color: var(--control); font-weight: 600; }
+    .health-row.away .name { color: var(--away); }
+
+    .teams { font-stretch: 70%; font-weight: 800; font-size: 1.6rem; gap: 14px; }
+    .teams .score { color: var(--ink); font-weight: 900; font-size: 2.2rem; font-stretch: 62%; }
+    .overlay h2, .story-item h3 { font-stretch: 72%; font-weight: 800; }
+    .health-num { font-stretch: 62%; font-weight: 900; font-size: 1.5rem; }
+    .watermark { font-stretch: 62%; font-weight: 800; }
+    body { font-variant-numeric: tabular-nums; }
+    .health-title, .activity-title, .controls label, .team-checks-label {
+      font-size: .82rem; font-weight: 600; color: var(--ink);
+    }
+    .health-title::before, .activity-title::before { display: none; }
+    .health-title, .activity-title { padding-left: 0; }
+    .health-note, .activity-title span { color: var(--ink-dim); font-weight: 400; font-style: normal; }
+    .form-chip.W { background: var(--win); }
+    .activity-panel, .player-stats-panel, .league-panel, .story-panel, .health, .shot-map-wrap {
+      border-radius: 6px; border-color: transparent;
+    }
+    .stage { border-radius: 4px; }
+    .story-item.recap { border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
+    :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { transition: none !important; animation: none !important; }
+    }
   </style>
 </head>
 <body>
@@ -608,9 +639,17 @@
     </div>
 
     <div class="health stale" id="health">
-      <div class="health-title">Match health · control
-        <span class="health-note">Each team's own 0-100 score — not a split, both can be high or low</span>
+      <div class="health-title">Match pulse
+        <span class="health-note">Each team's control, 0 to 100, minute by minute. Home above the line, away below.</span>
       </div>
+      <svg class="ribbon" id="ribbon" viewBox="0 0 900 120" preserveAspectRatio="none" role="img"
+           aria-label="Control over the match for both teams">
+        <line class="ribbon-axis" x1="0" y1="60" x2="900" y2="60"></line>
+        <line class="ribbon-half" x1="450" y1="4" x2="450" y2="116"></line>
+        <path class="ribbon-home" id="ribbonHome"></path>
+        <path class="ribbon-away" id="ribbonAway"></path>
+        <g id="ribbonGoals"></g>
+      </svg>
       <div class="health-row">
         <span class="name" id="healthNameA">—</span>
         <div class="health-bar-wrap">
@@ -976,6 +1015,40 @@
       mergePassStats(msg.player_passes);
       lastHealth = msg;
       renderMetricPin();
+      recordPulse(msg);
+    }
+
+    // Match pulse: one point per health tick, home control above the centre
+    // line and away below, plus a marker wherever the score changed.
+    let pulse = [], pulseGoals = [], lastScore = null;
+    function recordPulse(msg) {
+      const min = toSeconds(msg.show_at) / 60;
+      if (pulse.length && min < pulse[pulse.length - 1].min - 1) {  // a new match started
+        pulse = []; pulseGoals = []; lastScore = null;
+      }
+      const [A, B] = teamNames;
+      pulse.push({ min, a: msg.teams[A].control, b: msg.teams[B].control });
+      if (msg.score) {
+        if (lastScore) {
+          if (msg.score[A] > lastScore[A]) pulseGoals.push({ min, team: A });
+          if (msg.score[B] > lastScore[B]) pulseGoals.push({ min, team: B });
+        }
+        lastScore = { ...msg.score };
+      }
+      drawPulse();
+    }
+    function drawPulse() {
+      if (!pulse.length) return;
+      const x = m => (Math.min(m, 90) / 90 * 900).toFixed(1);
+      const area = (sign, key) => {
+        const pts = pulse.map(p => `${x(p.min)},${(60 - sign * p[key] * 0.56).toFixed(1)}`);
+        return `M${x(pulse[0].min)},60 L${pts.join(' L')} L${x(pulse[pulse.length - 1].min)},60 Z`;
+      };
+      document.getElementById('ribbonHome').setAttribute('d', area(1, 'a'));
+      document.getElementById('ribbonAway').setAttribute('d', area(-1, 'b'));
+      document.getElementById('ribbonGoals').innerHTML = pulseGoals.map(g =>
+        `<ellipse class="ribbon-goal" cx="${x(g.min)}" cy="60" rx="4" ry="9"
+           fill="var(${g.team === teamNames[0] ? '--control' : '--away'})"><title>Goal, ${g.team}</title></ellipse>`).join('');
     }
 
     // "Your metric" (brief: "a single performance metric a viewer cares
@@ -1046,7 +1119,7 @@
       const visible = teamFilter.length ? shots.filter(s => teamFilter.includes(s.team)) : shots;
       if (!visible.length) { g.innerHTML = ''; return; }
       g.innerHTML = visible.map(s => {
-        const r = (1.0 + (s.xg || 0) * 3.0).toFixed(2);
+        const r = (0.45 + (s.xg || 0) * 1.4).toFixed(2);  // viewBox is only 68 units wide
         const teamCls = s.team === teamNames[0] ? 'home' : 'away';
         const outcomeCls = s.is_goal ? 'goal' : (s.outcome === 'on_target' ? 'on-target' : 'off-target');
         const label = s.is_goal ? 'GOAL' : s.outcome.replace('_', ' ');
