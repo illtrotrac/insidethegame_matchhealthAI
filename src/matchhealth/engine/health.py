@@ -15,15 +15,30 @@ class HealthEngine:
         self.teams = teams
         self.window_s = window_s
         self._events: deque[MatchEvent] = deque()
-        self._last_pressure_t: dict[str, float] = {}
+        # A pressure event (team = the pressing side) applies to the pressed
+        # team's next pass -- the generator emits it immediately before that
+        # pass in the same possession step (see generator.py).
+        self._pressed: dict[str, bool] = {t: False for t in teams}
+        self._pressured_pass_ids: set[int] = set()
 
     def update(self, ev: MatchEvent) -> dict[str, HealthSnapshot]:
         self._events.append(ev)
         while self._events and ev.t - self._events[0].t > self.window_s:
-            self._events.popleft()
+            self._pressured_pass_ids.discard(self._events.popleft().id)
         if ev.type == "pressure":
-            self._last_pressure_t[ev.team] = ev.t
+            pressed = self.teams[1] if ev.team == self.teams[0] else self.teams[0]
+            self._pressed[pressed] = True
+        elif ev.type == "pass" and ev.team in self._pressed:
+            if self._pressed[ev.team]:
+                self._pressured_pass_ids.add(ev.id)
+            self._pressed[ev.team] = False
+        elif ev.type == "possession_change":
+            self._pressed = {t: False for t in self.teams}
         return self.snapshot()
+
+    def under_pressure(self, ev: MatchEvent) -> bool:
+        """Whether this pass (already passed to update()) was played under pressure."""
+        return ev.id in self._pressured_pass_ids
 
     def snapshot(self) -> dict[str, HealthSnapshot]:
         passes = {t: [] for t in self.teams}
@@ -45,7 +60,8 @@ class HealthEngine:
             ps = passes[team]
             done = [p for p in ps if p.outcome == "success"]
             completion = len(done) / len(ps) if ps else 0.0
-            avg_diff = (sum(pass_difficulty(p) or 0 for p in done) / len(done)) if done else 0.0
+            avg_diff = (sum(pass_difficulty(p, p.id in self._pressured_pass_ids) or 0
+                            for p in done) / len(done)) if done else 0.0
             possession = len(ps) / total_passes
             control = 100 * possession * (0.7 * completion + 0.3 * (0.5 + avg_diff))
             chaos = (turnovers_won[opp] + pressure[opp]) / minutes

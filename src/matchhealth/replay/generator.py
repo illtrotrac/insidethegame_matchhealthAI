@@ -1,8 +1,9 @@
 """Seeded synthetic match generator.
 
-Produces a football-realistic event stream (~1,500-1,900 events) with a
-narrative arc: team strengths drift over time and pressing phases are
-injected so the engine has real momentum swings to detect.
+Produces a football-realistic event stream (~1,500-2,000 events, ~25 shots,
+~2-4 goals) with a narrative arc: each club's playing style (see league.py)
+shapes pressure, tempo and pass length, and pressing spells are injected so
+the engine has real momentum swings to detect.
 
 All team and player names are fictional.
 """
@@ -13,9 +14,11 @@ import math
 import random
 from dataclasses import dataclass, field
 
+from matchhealth.replay.league import CLUBS, Club, fixture_for, matchweek_of, resolve_club
 from matchhealth.shared.models import MatchEvent
 
 PITCH_X, PITCH_Y = 105.0, 68.0
+SHOT_CHANCE = 0.02  # per possession step deep in the final third; tuned to ~25 shots/match
 
 
 @dataclass
@@ -24,6 +27,15 @@ class Team:
     players: list[str]
     attacking_right: bool  # first half direction
     strength: float = 0.5
+    press: float = 0.5
+    tempo: float = 0.5
+    directness: float = 0.5
+    style: str = ""
+
+    @classmethod
+    def from_club(cls, club: Club, attacking_right: bool) -> Team:
+        return cls(club.name, list(club.players), attacking_right, club.strength, club.press,
+                   club.tempo, club.directness, club.style)
 
 
 @dataclass
@@ -36,26 +48,40 @@ class Phase:
     intensity: float = 0.25
 
 
-DEFAULT_TEAMS = (
-    Team("Riverside FC", [
-        "A. Okafor", "L. Brandt", "M. Silva", "J. Kowalski", "T. Reyes", "K. Haddad",
-        "S. Lindqvist", "D. Mensah", "R. Takeda", "E. Novak", "C. Duarte",
-    ], attacking_right=True, strength=0.55),
-    Team("Northgate United", [
-        "P. Varga", "H. Osei", "N. Petrov", "G. Moreau", "I. Santos", "B. Achterberg",
-        "F. Kamara", "O. Castillo", "Y. Park", "V. Ricci", "Z. Adeyemi",
-    ], attacking_right=False, strength=0.45),
-)
+def _pressing_phases(rng: random.Random, teams: tuple[Team, Team]) -> list[Phase]:
+    """One spell per team per half for genuine pressers, one per match otherwise."""
+    phases = []
+    for team in teams:
+        halves = (0, 2700) if team.press >= 0.6 else (rng.choice((0, 2700)),)
+        for half in halves:
+            start = half + rng.uniform(600, 2100)
+            phases.append(Phase(round(start), round(start + rng.uniform(300, 420)),
+                                team.name, round(0.10 + 0.22 * team.press, 2)))
+    return phases
 
 
 @dataclass
 class MatchConfig:
     seed: int = 7
-    teams: tuple[Team, Team] = DEFAULT_TEAMS
-    phases: list[Phase] = field(default_factory=lambda: [
-        Phase(1500, 1860, "Northgate United", 0.22),
-        Phase(3600, 3960, "Riverside FC", 0.30),
-    ])
+    teams: tuple[Team, Team] | None = None  # None: the seed picks a league fixture
+    phases: list[Phase] | None = None       # None: derived from the teams' press styles
+    home: str | None = None  # pick a fixture by (partial) club name instead of by seed
+    away: str | None = None
+    matchweek: int = field(default=0, init=False)
+
+    def __post_init__(self) -> None:
+        rng = random.Random(f"phases-{self.seed}")
+        if self.teams is None:
+            if self.home or self.away:
+                if not (self.home and self.away):
+                    raise ValueError("Choose both a home and an away club")
+                home, away = resolve_club(self.home), resolve_club(self.away)
+                self.matchweek = matchweek_of(home, away)
+            else:
+                self.matchweek, home, away = fixture_for(self.seed)
+            self.teams = (Team.from_club(CLUBS[home], True), Team.from_club(CLUBS[away], False))
+        if self.phases is None:
+            self.phases = _pressing_phases(rng, self.teams)
 
 
 def generate_match(cfg: MatchConfig | None = None) -> list[MatchEvent]:
@@ -86,18 +112,18 @@ def generate_match(cfg: MatchConfig | None = None) -> list[MatchEvent]:
         x, y = PITCH_X / 2, PITCH_Y / 2
 
         while t < half_end:
-            press = pressing_against(in_poss, t)
             opp = away if in_poss is home else home
+            press = pressing_against(in_poss, t)
             carrier = rng.choice(in_poss.players[1:])
 
-            if rng.random() < 0.18 + press:
+            if rng.random() < 0.08 + 0.18 * opp.press + press:
                 t += rng.uniform(0.5, 2)
                 emit(t=t, type="pressure", team=opp.name, player=rng.choice(opp.players[1:]),
                      x=round(x, 1), y=round(y, 1))
 
             depth = attack_x(in_poss, t, x)
             # Shot when deep in the final third
-            if depth > 82 and rng.random() < 0.22:
+            if depth > 82 and rng.random() < SHOT_CHANCE + 0.03 * in_poss.strength:
                 t += rng.uniform(1, 3)
                 dist = math.hypot(PITCH_X - depth, y - PITCH_Y / 2)
                 r = rng.random()
@@ -105,7 +131,7 @@ def generate_match(cfg: MatchConfig | None = None) -> list[MatchEvent]:
                 emit(t=t, type="shot", team=in_poss.name, player=carrier, x=round(x, 1),
                      y=round(y, 1), outcome=outcome,
                      speed_kmh=round(rng.gauss(95, 15) - dist * 0.6, 1))
-                if outcome == "on_target" and rng.random() < 0.28 + 0.1 * in_poss.strength:
+                if outcome == "on_target" and rng.random() < 0.18 + 0.3 * in_poss.strength:
                     emit(t=t + 1, type="goal", team=in_poss.name, player=carrier)
                     in_poss, x, y = opp, PITCH_X / 2, PITCH_Y / 2
                     t += 45
@@ -114,15 +140,16 @@ def generate_match(cfg: MatchConfig | None = None) -> list[MatchEvent]:
                 in_poss, x, y = opp, (5 if depth > 52 else 100), PITCH_Y / 2
                 continue
 
-            # Pass
-            length = max(3.0, rng.gauss(16, 8))
+            # Pass: direct sides go longer, quick sides move it sooner
+            length = max(3.0, rng.gauss(10 + 12 * in_poss.directness, 8))
             angle = rng.uniform(-1.1, 1.1)
             right = in_poss.attacking_right if t < 2700 else not in_poss.attacking_right
             forward = 1 if right else -1
             nx = min(max(x + forward * length * math.cos(angle), 1), PITCH_X - 1)
             ny = min(max(y + length * math.sin(angle), 1), PITCH_Y - 1)
-            p_success = 0.84 + 0.1 * (in_poss.strength - 0.5) - 0.004 * max(0, length - 15) - press
-            t += rng.uniform(2, 5)
+            p_success = (0.84 + 0.1 * (in_poss.strength - 0.5) - 0.004 * max(0, length - 15)
+                         - 0.04 * (opp.press - 0.5) - press)
+            t += rng.uniform(2, 5) * (1.25 - 0.5 * in_poss.tempo)
             ok = rng.random() < p_success
             emit(t=t, type="pass", team=in_poss.name, player=carrier, x=round(x, 1),
                  y=round(y, 1), end_x=round(nx, 1), end_y=round(ny, 1),
@@ -134,7 +161,7 @@ def generate_match(cfg: MatchConfig | None = None) -> list[MatchEvent]:
 
             # Foul: ref stops play. Fouled team (in_poss) keeps the ball via
             # a free kick -- no turnover this time. Occasionally a card.
-            if rng.random() < 0.12:
+            if rng.random() < 0.09:
                 severity = rng.random()
                 card = "red" if severity > 0.985 else "yellow" if severity > 0.85 else "clean"
                 emit(t=t + 0.5, type="foul", team=opp.name, player=rng.choice(opp.players[1:]),

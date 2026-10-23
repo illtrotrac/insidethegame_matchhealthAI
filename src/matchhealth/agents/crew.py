@@ -108,26 +108,19 @@ class Personaliser:
             variants = []
             for p in personas:
                 mode = p.get("mode", "base")
-                fav = p.get("favourite_player")
-                # Only claim this moment is "about" the fan's player when it
-                # genuinely is -- don't relabel an unrelated moment as theirs
-                # just because a favourite_player persona exists.
-                involves_fav = bool(fav) and base.focus_player == fav
                 head = base.headline
                 if mode == "casual":
                     head = _casualize(head)
                 elif mode == "analyst":
                     head = _analystify(head, base.stats)
-                elif mode == "fan":
-                    head = _casualize(head)
-                    head = (f"{fav}'s moment: {head}" if involves_fav
-                            else f"Following {fav}: {head}")
-                if p.get("language", "en") != "en":
-                    head = f"[{p['language']}] {head}"
+                lang = p.get("language", "en")
+                if lang == "es":
+                    head = _translate_es(head)
+                elif lang != "en":
+                    head = f"[{lang}] {head}"
                 variants.append(base.model_copy(update={
                     "headline": head[:80], "mode": mode,
-                    "language": p.get("language", "en"),
-                    "focus_player": fav if involves_fav else base.focus_player}))
+                    "language": p.get("language", "en")}))
             return variants
         data = await self.llm.complete_json(
             load_prompt("personaliser"),
@@ -168,10 +161,63 @@ def _analystify(headline: str, stats: list) -> str:
     stat inline so the headline reads as data-backed, not just restyled."""
     for s in stats:
         if s.value is not None:
-            return f"{headline.rstrip('.')} ({s.label}: {s.value})"
-        if s.from_ is not None and s.to is not None:
-            return f"{headline.rstrip('.')} ({s.from_}->{s.to})"
+            value = int(s.value) if isinstance(s.value, float) and s.value.is_integer() else s.value
+            out = f"{headline.rstrip('.')} ({s.label}: {value})"
+        elif s.from_ is not None and s.to is not None:
+            out = f"{headline.rstrip('.')} ({s.from_}->{s.to})"
+        else:
+            continue
+        # Only if it fits: Personaliser truncates to 80, which cut stats mid-bracket
+        return out if len(out) <= 80 else headline
     return headline
+
+# Deterministic phrase substitution over this project's own fixed mock-mode
+# vocabulary -- NOT a real translator. The real-LLM Personaliser path
+# (prompts/personaliser.md) does genuine translation; this only exists so
+# mock mode (MATCHHEALTH_MOCK_LLM=1, including the scheduled judging-period
+# job) shows actual Spanish text instead of an English headline with a
+# "[es]" tag stapled to the front.
+_ES_SWAPS = [
+    ("is shown a yellow card for", "ve tarjeta amarilla por"),
+    ("picks up a yellow for", "recibe amarilla por"),
+    ("is shown a red card for", "ve tarjeta roja por"),
+    ("sees red for", "ve la roja por"),
+    ("a late challenge", "una entrada tardía"),
+    ("a reckless tackle", "una entrada temeraria"),
+    ("a mistimed challenge", "una entrada mal calculada"),
+    ("a foul in the build-up", "una falta en la jugada"),
+    ("a shirt pull", "un tirón de camiseta"),
+    ("a trip", "una zancadilla"),
+    ("Free kick to", "Tiro libre para"),
+    ("Big chance for", "Gran ocasión para"),
+    ("Huge chance for", "Ocasión enorme para"),
+    ("shot quality", "calidad de tiro"),
+    ("chance quality", "calidad de ocasión"),
+    ("have seized control", "han tomado el control"),
+    ("are running the show", "dominan el partido"),
+    ("Control score up from", "Puntuación de control sube de"),
+    ("press is wrecking", "presión está destrozando"),
+    ("press is breaking", "presión está rompiendo"),
+    ("the opponent's rhythm", "el ritmo del rival"),
+    ("turnovers in 5 minutes", "pérdidas forzadas en 5 minutos"),
+    ("Rocket from", "Misil de"),
+    ("Screamer from", "Golazo de"),
+    ("slices open the defense with a", "abre la defensa con un"),
+    ("threads a", "envía un"),
+    ("pass for", "pase para"),
+    ("under pressure", "bajo presión"),
+    ("difficulty", "dificultad"),
+    ("nets one for", "marca para"),
+    ("scores for", "anota para"),
+    ("against", "contra"),
+]
+
+
+def _translate_es(text: str) -> str:
+    for old, new in _ES_SWAPS:
+        text = text.replace(old, new)
+    return text
+
 
 def _template_for(trig: Trigger) -> str:
     return {"big_chance": "big_chance", "goal": "big_chance",
@@ -197,7 +243,10 @@ def _facts_to_stats(trig: Trigger) -> list[dict]:
 def _mock_why(trig: Trigger) -> str:
     f = trig.facts
     return {
-        "goal": f"{f.get('scorer')} scores for {trig.team}.",
+        "goal": f"{f.get('scorer')} scores for {trig.team}." + (
+            "" if not f.get("scorer_season_goals") else
+            " First goal of the season." if f["scorer_season_goals"] == 1 else
+            f" Goal number {f['scorer_season_goals']} this season."),
         "big_chance": f"Big chance for {trig.team}: shot quality {f.get('shot_quality')}.",
         "control_swing": (f"{trig.team} have seized control. Control score up from "
                           f"{f.get('control_from')} to {f.get('control_to')}."),
@@ -207,5 +256,6 @@ def _mock_why(trig: Trigger) -> str:
         "foul": (f"{trig.player} is shown a {f.get('card')} card for {f.get('foul_type')} "
                 f"against {trig.team}. Free kick to {f.get('fouled_team')}."),
         "pass_quality": (f"{trig.player} threads a {f.get('pass_distance_m')}m pass for "
-                         f"{trig.team} (difficulty {f.get('pass_difficulty')})."),
+                         f"{trig.team}{' under pressure' if f.get('under_pressure') else ''} "
+                         f"(difficulty {f.get('pass_difficulty')})."),
     }[trig.kind]

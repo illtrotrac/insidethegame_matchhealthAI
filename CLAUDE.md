@@ -9,12 +9,12 @@ Match Health AI: entry for the Microsoft x Premier League "Inside the Game" hack
 
 ## Architecture decisions (agreed — don't change without asking)
 1. **Code before AI.** `engine/` is deterministic Python and never calls an LLM. Agents run only when `engine/thresholds.py` fires (~30–50 chains per match).
-2. **Four agents, distinct roles:** Spotter (confirm/dedupe/priority, nano) → Analyst (explain *why*, mini) → Producer (overlay spec, nano) → Personaliser (all variants in ONE structured call, nano).
+2. **Five agents, distinct roles:** per moment, Spotter (confirm/dedupe/priority, nano) → Analyst (explain *why*, mini) → Producer (overlay spec, nano) → Personaliser (all variants in ONE structured call, nano). Across the match, the **Narrator** (`agents/narrator.py`, added 23 Oct): pre-match storylines from season facts, enriches triggers with season context before the Analyst, checkpoints at 15'/HT/60', full-time recap — ~5 calls/match, all personas per call, deterministic fallback text on timeout/bad shape.
 3. **Producer output must validate** against `schemas/overlay.schema.json`. On validation failure or Analyst timeout → stats-only fallback overlay. Never a blank broadcast.
 4. **Personaliser never changes template, timing or priority** — only copy, language, `focus_player`, mode.
 5. **Shared state** in Cosmos DB (free tier); `shared/state.py` has an in-memory implementation for local runs and tests.
 6. **Cost:** scale-to-zero Container Apps, free tiers everywhere, no Event Hubs/Fabric/AI Search unless asked. Budget target < US$15 for the whole hackathon.
-7. Orchestration should use **Microsoft Agent Framework** with models deployed in **Microsoft Foundry**. `agents/orchestrator.py` currently uses a plain async pipeline behind the `LLMClient` protocol — check the current Agent Framework docs before wiring it in.
+7. Orchestration uses **Microsoft Agent Framework** (`agent-framework-core` 1.23, ported 23 Oct): `agents/orchestrator.py` builds one `Workflow` per crew — each agent an `Executor`, typed handoff messages on edges, conditional `Recovery` edges to a `fallback` executor (graph in `docs/agent-workflow.md`). Model calls still go through the `LLMClient` protocol (Foundry via managed identity), so mock mode and tests are unchanged.
 
 ## Conventions
 - Python 3.11+, type hints, pydantic models in `shared/models.py`, pytest.
@@ -106,8 +106,7 @@ LLM-generated headline from inside Azure.
       Apps, Static Web App, GHCR image, Cosmos/Web PubSub as `existing` resources where already
       provisioned, all role assignments) so the whole thing is reproducible from one
       `az deployment group create` instead of the ad hoc CLI sequence used today.
-- [ ] Port orchestrator to Agent Framework; add tracing to App Insights. (Lower priority: the
-      multi-agent *behavior* — distinct roles, timeouts, fallback — is already real regardless of
-      which SDK orchestrates it.)
-- [ ] Full-time recap generation (one call over stored moments).
+- [x] Port orchestrator to Agent Framework (Workflow + Executors, conditional recovery edges).
+- [ ] Add Agent Framework tracing to App Insights.
+- [x] Full-time recap generation — done by the Narrator agent, plus storylines and checkpoints.
 - [ ] Record the < 2 min demo video.

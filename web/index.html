@@ -6,15 +6,21 @@
   <title>Match Health overlay</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #07140d;
-      --panel: rgba(6, 14, 9, .88);
-      --panel-2: rgba(6, 14, 9, .6);
-      --ink: #f4fff7;
-      --ink-dim: rgba(244, 255, 247, .68);
-      --border: rgba(244, 255, 247, .14);
+      /* Dark glassmorphism (navy/slate base, green accent) -- picked via
+         `ui-ux-pro-max --design-system "sports analytics dashboard dark mode
+         broadcast overlay"` rather than guessed; its --color-accent (#22C55E)
+         happened to already match this project's --control green, so the
+         existing semantic accents below carry over unchanged. */
+      --bg: #0a0f1a;
+      --panel: rgba(21, 30, 48, .72);
+      --panel-2: rgba(21, 30, 48, .5);
+      --panel-solid: #141d30;  /* solid navy for surfaces that can't be translucent (native <select> popups) */
+      --ink: #f8fafc;
+      --ink-dim: rgba(248, 250, 252, .64);
+      --border: rgba(148, 163, 184, .16);
       --control: #22c55e;   /* in-possession, calm; also "team A" */
       --away: #38bdf8;      /* "team B" in the health meter, for a clear vs */
       --chaos: #f59e0b;     /* pressure, turnovers */
@@ -22,15 +28,30 @@
       --info: #38bdf8;      /* comparisons */
       --muted: #94a3b8;     /* fallback / degraded */
       --focus: #c4b5fd;     /* "you selected this" -- distinct from gold's priority meaning */
-      --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+      --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;  /* broadcast headlines */
+      --mono: 'Fira Code', ui-monospace, 'SFMono-Regular', monospace;  /* all numeric/data */
+      --sans: 'Fira Sans', -apple-system, "Segoe UI", system-ui, sans-serif;  /* body/UI chrome */
     }
     * { box-sizing: border-box; }
     body {
-      margin: 0; background: var(--bg); color: var(--ink);
-      font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+      margin: 0; color: var(--ink); font-family: var(--sans);
+      background: var(--bg);
+      background-image: radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(34,197,94,.08), transparent 60%),
+        radial-gradient(ellipse 900px 500px at 100% 0%, rgba(56,189,248,.06), transparent 55%);
+      background-attachment: fixed;
       padding-block: 20px 40px;
     }
     .wrap { max-width: 1400px; margin: 0 auto; padding-inline: 16px; }
+
+    /* Numeric/data values throughout the dashboard read as monospace --
+       Fira Code gives the "broadcast telemetry" precision goalline.ai-style
+       dashboards have, and pairs tabular-nums with real fixed-width digits. */
+    .clock, .teams .score, .health-num, .health-sub, .wdl-labels,
+    .rating-bar-row b, .rating-stat b, .player-stat-metrics, .stat-chip,
+    .activity-body .meta, .shot-map-legend, .playerStatsCount, #playerStatsCount,
+    #activityCount {
+      font-family: var(--mono);
+    }
 
     /* ---- header: teams, clock, controls -------------------------------- */
     .matchbar {
@@ -49,30 +70,54 @@
     .clock {
       font-variant-numeric: tabular-nums; color: var(--ink-dim);
       font-size: .85rem; border: 1px solid var(--border); border-radius: 999px;
-      padding: 2px 10px; font-family: -apple-system, system-ui, sans-serif;
+      padding: 3px 12px; background: rgba(255,255,255,.03);
     }
-    /* Deliberately muted: these are configuration, not content -- the match
-       itself should lead, not compete with the dropdowns for attention. */
-    .controls { display: flex; gap: 8px; opacity: .72; transition: opacity .15s; }
-    .controls:hover, .controls:focus-within { opacity: 1; }
+    .controls { display: flex; gap: 10px; flex-wrap: wrap; }
     .controls label {
-      display: flex; align-items: center; gap: 4px; font-size: .68rem;
-      color: var(--ink-dim); text-transform: uppercase; letter-spacing: .03em;
+      display: flex; align-items: center; gap: 6px; font-size: .72rem;
+      color: var(--ink-dim); text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
     }
     .controls select {
-      background: transparent; color: var(--ink-dim); border: 1px solid var(--border);
-      border-radius: 5px; padding: 2px 6px; font: inherit; font-size: .72rem;
+      background: var(--panel-solid); color: var(--ink); border: 1px solid var(--border);
+      border-radius: 8px; padding: 7px 12px; font: inherit; font-size: .88rem; cursor: pointer;
+      transition: border-color .15s, background .15s;
     }
+    .controls select:hover { border-color: var(--control); background: #182036; }
+    .controls select:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+    /* Native <select> popups ignore most CSS, but Chromium does respect
+       background/color on <option> -- without this the options list falls
+       back to a white popup with our light ink colors on it, unreadable. */
+    .controls select option {
+      background: var(--panel-solid); color: var(--ink);
+    }
+    .team-checks {
+      display: flex; align-items: center; gap: 8px; background: var(--panel-solid);
+      border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px;
+    }
+    .team-checks-label {
+      font-size: .72rem; color: var(--ink-dim); text-transform: uppercase;
+      letter-spacing: .04em; font-weight: 600;
+    }
+    .team-check {
+      display: flex; align-items: center; gap: 5px; font-size: .85rem;
+      color: var(--ink); cursor: pointer;
+    }
+    .team-check input { width: 15px; height: 15px; cursor: pointer; accent-color: var(--control); }
 
     /* ---- match health meter: the actual point of this project ---------- */
     .health {
-      border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px;
-      margin-bottom: 14px; background: var(--panel-2);
+      border: 1px solid var(--border); border-radius: 14px; padding: 14px 18px;
+      margin-bottom: 14px; background: var(--panel); backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px); box-shadow: 0 8px 24px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.04);
     }
     .health-title {
       display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
-      font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
-      color: var(--ink-dim); margin-bottom: 10px;
+      font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em;
+      color: var(--ink-dim); margin-bottom: 10px; position: relative; padding-left: 12px;
+    }
+    .health-title::before, .activity-title::before {
+      content: ''; position: absolute; left: 0; top: 1px; bottom: 1px; width: 3px;
+      border-radius: 999px; background: var(--control);
     }
     .health-note {
       text-transform: none; letter-spacing: 0; font-style: italic; font-size: .72rem;
@@ -102,23 +147,148 @@
     }
     .health.stale { opacity: .45; }
 
-    /* ---- layout: pitch | sidebar (activity + player stats stacked) ------ */
-    .main-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
-    @media (min-width: 860px) {
-      .main-grid { grid-template-columns: 1.7fr 1fr; align-items: start; }
+    /* ---- analyst-only: win/draw/loss + attack/defense ratings ----------
+       Hidden entirely in casual mode -- this is exactly the "stats-dense"
+       depth casual explicitly doesn't want cluttering a storyline view. */
+    .health-advanced { display: none; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+    body[data-mode="analyst"] .health-advanced { display: block; }
+    .wdl-bar {
+      display: flex; height: 14px; border-radius: 999px; overflow: hidden;
+      background: rgba(255,255,255,.08); margin-bottom: 6px;
     }
-    .sidebar { display: flex; flex-direction: column; gap: 14px; }
+    .wdl-seg { height: 100%; transition: width .6s ease; }
+    .wdl-seg.home { background: var(--control); }
+    .wdl-seg.draw { background: var(--muted); }
+    .wdl-seg.away { background: var(--away); }
+    .wdl-labels {
+      display: flex; justify-content: space-between; font-size: .72rem;
+      color: var(--ink-dim); font-variant-numeric: tabular-nums; margin-bottom: 14px;
+    }
+    .ratings-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .rating-card {
+      border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+      background: rgba(255,255,255,.03); transition: box-shadow .2s, background .2s, opacity .2s;
+    }
+    .rating-title {
+      font-size: .78rem; font-weight: 600; margin-bottom: 4px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .rating-stat {
+      display: flex; justify-content: space-between; font-size: .76rem;
+      color: var(--ink-dim); font-variant-numeric: tabular-nums;
+    }
+    .rating-stat b { color: var(--ink); font-weight: 700; }
+    .rating-title {
+      cursor: pointer; user-select: none; border-radius: 4px;
+    }
+    .rating-title:hover, .rating-title:focus-visible { color: var(--focus); outline: none; }
+    .rating-card.filtered-in { box-shadow: inset 0 0 0 1px var(--focus); background: rgba(196,181,253,.06); }
+    .rating-card.filtered-out { opacity: .4; }
+    .rating-bar-row { display: flex; align-items: center; gap: 6px; font-size: .74rem; color: var(--ink-dim); margin-bottom: 3px; }
+    .rating-bar-label { width: 46px; flex-shrink: 0; }
+    .rating-bar { flex: 1; height: 6px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+    .rating-bar-fill { height: 100%; border-radius: 999px; width: 0; transition: width .6s ease; }
+    .rating-bar-fill.atk { background: var(--control); }
+    .rating-bar-fill.def { background: var(--info); }
+    .rating-bar-row b { width: 26px; text-align: right; flex-shrink: 0; color: var(--ink); font-variant-numeric: tabular-nums; }
+    .team-filter-note {
+      display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: .74rem; color: var(--ink-dim);
+      margin-top: 10px; padding: 6px 10px; border: 1px dashed var(--focus); border-radius: 6px;
+    }
+    .team-filter-note button {
+      background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 999px; color: var(--ink-dim);
+      font: inherit; font-size: .7rem; padding: 3px 10px; cursor: pointer; margin-left: auto;
+      transition: color .15s, border-color .15s;
+    }
+    .team-filter-note button:hover { color: var(--ink); border-color: var(--focus); }
+
+    .shot-map-wrap {
+      display: none; margin-top: 14px; border: 1px solid var(--border); border-radius: 14px;
+      padding: 14px 16px; background: var(--panel); backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px); box-shadow: 0 8px 24px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.04);
+    }
+    body[data-mode="analyst"] .shot-map-wrap { display: block; }
+    .shot-map { width: 100%; height: auto; aspect-ratio: 68/25; border-radius: 8px; display: block; }
+    .shot-map-pitch { fill: rgba(255,255,255,.03); stroke: var(--border); stroke-width: .3; }
+    .shot-map-box { fill: none; stroke: var(--border); stroke-width: .25; }
+    .shot-map-goal { stroke: rgba(255,255,255,.45); stroke-width: .6; }
+    .shot-dot { stroke-width: .25; }
+    .shot-dot.home { fill: var(--control); stroke: var(--control); }
+    .shot-dot.away { fill: var(--away); stroke: var(--away); }
+    .shot-dot.off-target { fill-opacity: .18; }
+    .shot-dot.on-target { fill-opacity: .55; }
+    .shot-dot.goal { fill: var(--gold); stroke: var(--gold); fill-opacity: 1; }
+    .shot-map-legend {
+      display: flex; gap: 14px; margin-top: 6px; font-size: .72rem; color: var(--ink-dim);
+    }
+    .legend-dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px;
+    }
+    .legend-dot.home { background: var(--control); }
+    .legend-dot.away { background: var(--away); }
+    .legend-dot.goal { background: var(--gold); }
+
+    /* ---- layout: one page grid, panels placed per mode -------------------
+       The sidebar wrapper is display:contents, so every panel is a direct
+       grid item. Casual: pitch is the hero with the Story beside it, tables
+       in a row underneath. Analyst: the player stats table takes the slot
+       beside the pitch (a one-third pitch was too small for its overlays);
+       league, activity and story share the row below.
+       The panel beside the pitch is sized to the pitch's row (height 0 +
+       min-height 100%) so long content scrolls instead of stretching it. */
+    .sidebar { display: contents; }
+    .main-grid {
+      display: grid; gap: 14px; align-items: start;
+      grid-template-columns: 1fr;
+      grid-template-areas: "stage" "story" "stats" "league" "activity";
+    }
+    body[data-mode="analyst"] .main-grid {
+      grid-template-areas: "stats" "stage" "league" "activity" "story";
+    }
+    .stage { grid-area: stage; }
+    .story-panel { grid-area: story; }
+    .player-stats-panel { grid-area: stats; }
+    .league-panel { grid-area: league; }
+    .activity-panel { grid-area: activity; }
+    @media (min-width: 700px) {
+      .main-grid {
+        grid-template-columns: 1fr 1fr;
+        grid-template-areas: "stage stage" "story activity" "league stats";
+      }
+      body[data-mode="analyst"] .main-grid {
+        grid-template-areas: "stats stats" "stage league" "activity story";
+      }
+    }
+    @media (min-width: 1100px) {
+      .main-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-areas: "stage stage story" "league stats activity";
+      }
+      body[data-mode="analyst"] .main-grid {
+        grid-template-areas: "stage stage stats" "league activity story";
+      }
+      body:not([data-mode="analyst"]) .story-panel,
+      body[data-mode="analyst"] .player-stats-panel {
+        align-self: stretch; height: 0; min-height: 100%; max-height: none;
+      }
+    }
+    body[data-mode="analyst"] .player-stats-panel { border-color: rgba(196,181,253,.35); }
+    body[data-mode="analyst"] .health-num { font-size: 1.5rem; }
+    body[data-mode="analyst"] .health-sub { font-size: .78rem; color: var(--ink); }
 
     /* ---- shared panel chrome: player stats + agent activity ------------- */
-    .activity-panel, .player-stats-panel {
-      border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2);
-      padding: 12px 14px; max-height: 420px; overflow-y: auto;
+    .activity-panel, .player-stats-panel, .league-panel, .story-panel {
+      border: 1px solid var(--border); border-radius: 14px; background: var(--panel);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      box-shadow: 0 8px 24px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.04);
+      padding: 14px 16px; max-height: 420px; overflow-y: auto;
     }
     .activity-title {
       display: flex; justify-content: space-between; align-items: baseline;
-      font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
-      color: var(--ink-dim); margin-bottom: 10px;
+      font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em;
+      color: var(--ink-dim); margin-bottom: 10px; position: relative; padding-left: 12px;
     }
+    .activity-panel .activity-title::before { background: var(--focus); }
     .activity-title span { font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
 
     /* Player stats: tallied client-side from confirmed Agent Activity
@@ -155,11 +325,57 @@
     .player-stat-row.dimmed { opacity: .4; }
     .empty-note { color: var(--ink-dim); font-size: .8rem; font-style: italic; }
     .show-all-btn {
-      display: block; width: 100%; margin-top: 8px; padding: 6px;
-      background: none; border: 1px dashed var(--border); border-radius: 6px;
+      display: block; width: 100%; margin-top: 8px; padding: 7px;
+      background: rgba(255,255,255,.03); border: 1px dashed var(--border); border-radius: 8px;
       color: var(--ink-dim); font: inherit; font-size: .74rem; cursor: pointer;
+      transition: color .15s, border-color .15s, background .15s;
     }
-    .show-all-btn:hover { color: var(--ink); border-color: var(--ink-dim); }
+    .show-all-btn:hover { color: var(--ink); border-color: var(--control); background: rgba(34,197,94,.06); }
+    /* Story so far: the Narrator agent's storylines, checkpoints and recap
+       (agents/narrator.py). Casual mode's lead panel; analyst moves it below
+       the numbers. Newest first. */
+    .story-panel .activity-title::before { background: var(--gold); }
+    .story-item { padding: 9px 0; border-top: 1px solid var(--border); }
+    .story-item:first-child { border-top: none; padding-top: 0; }
+    .story-item .when { font-size: .7rem; color: var(--ink-dim); font-family: var(--mono); }
+    .story-item h3 {
+      margin: 2px 0 4px; font-family: var(--display); font-weight: 700; font-size: 1.05rem;
+      line-height: 1.2;
+    }
+    .story-item p { margin: 0 0 3px; font-size: .82rem; line-height: 1.45; max-width: 60ch; }
+    .story-item.recap {
+      border: 1px solid rgba(251,191,36,.35); border-radius: 10px; padding: 10px 12px;
+      background: rgba(251,191,36,.06); margin-bottom: 6px;
+    }
+
+    /* League table: season-so-far context from replay/season.py. The two
+       teams playing live are highlighted; xG columns are analyst-only. */
+    .league-table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+    .league-table th {
+      font-weight: 500; color: var(--ink-dim); font-size: .7rem; text-align: right;
+      padding: 0 4px 6px;
+    }
+    .league-table td {
+      padding: 5px 4px; border-top: 1px solid var(--border); text-align: right;
+      font-family: var(--mono); font-variant-numeric: tabular-nums;
+    }
+    .league-table .team {
+      text-align: left; font-family: var(--sans); max-width: 130px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .league-table tr.live td { background: rgba(196,181,253,.08); }
+    .league-table tr.live .team { color: var(--focus); font-weight: 600; }
+    .league-table .adv { display: none; }
+    body[data-mode="analyst"] .league-table .adv { display: table-cell; }
+    .form-chips { display: inline-flex; gap: 2px; }
+    .form-chip {
+      width: 14px; height: 14px; border-radius: 3px; font-size: .6rem; font-weight: 700;
+      display: inline-flex; align-items: center; justify-content: center; color: var(--bg);
+    }
+    .form-chip.W { background: var(--control); }
+    .form-chip.D { background: var(--muted); }
+    .form-chip.L { background: var(--chaos); }
+
     .activity-item {
       display: flex; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border);
       font-size: .82rem; animation: activity-in .3s ease;
@@ -249,6 +465,30 @@
       50% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
     }
 
+    /* "Your metric": one stat the viewer pinned, kept on screen all match
+       and refreshed on every health tick. Top-left so it never collides
+       with player_tag (top-right) or the lower-third overlays. */
+    .metric-pin {
+      position: absolute; left: 4%; top: 6%; z-index: 2; min-width: 150px;
+      background: var(--panel); border-radius: 10px; padding: 8px 12px;
+      border-top: 3px solid var(--focus);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      box-shadow: 0 8px 24px rgba(0,0,0,.35);
+    }
+    .metric-pin[hidden] { display: none; }
+    .metric-pin-label { font-size: .7rem; color: var(--ink-dim); margin-bottom: 4px; }
+    .metric-pin-row {
+      display: flex; align-items: center; gap: 8px; font-size: .8rem;
+      font-family: var(--mono); font-variant-numeric: tabular-nums;
+    }
+    .metric-pin-row .team { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .metric-pin-row b { color: var(--ink); }
+    .metric-pin-row i { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .metric-pin-row i.home { background: var(--control); }
+    .metric-pin-row i.away { background: var(--away); }
+    .metric-pin-row i.draw { background: var(--muted); }
+    .metric-pin .empty-note { font-size: .74rem; }
+
     /* "Focus" selector: highlight whichever overlay is genuinely about the
        chosen player (compares the real base.focus_player, not variant text). */
     .overlay.focused {
@@ -258,12 +498,13 @@
 
     /* ---- overlay card: shared base, then per-template overrides -------- */
     .overlay {
-      position: absolute; background: var(--panel); border-radius: 6px;
+      position: absolute; background: var(--panel); border-radius: 10px;
       padding: 12px 16px; transition: opacity .4s ease, transform .4s cubic-bezier(.2,.8,.2,1);
       opacity: 0; pointer-events: none; transform: translateY(10px);
       left: 4%; bottom: 7%; max-width: 58%; z-index: 2;
       border-left: 4px solid var(--control);
-      backdrop-filter: blur(2px);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      box-shadow: 0 8px 24px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.05);
     }
     .overlay.visible { opacity: 1; transform: translateY(0); }
     .overlay .tag {
@@ -278,7 +519,8 @@
     .stats { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
     .stat-chip {
       font-variant-numeric: tabular-nums; font-size: .76rem;
-      background: rgba(255,255,255,.06); border-radius: 5px; padding: 3px 7px;
+      background: rgba(255,255,255,.06); border: 1px solid var(--border);
+      border-radius: 7px; padding: 3px 8px;
     }
     .stat-chip b { color: var(--ink); }
     .stat-arrow { font-weight: 700; }
@@ -337,11 +579,27 @@
       <div class="teams">
         <span id="teamA">—</span><span class="score" id="score">–</span><span id="teamB">—</span>
         <span class="clock" id="clock">00:00</span>
+        <span class="clock" id="matchweek" hidden></span>
       </div>
       <div class="controls">
-        <label>Mode <select id="mode"><option>casual</option><option>analyst</option><option>fan</option></select></label>
+        <label>Mode <select id="mode"><option>casual</option><option>analyst</option></select></label>
         <label>Language <select id="lang"><option>en</option><option>es</option></select></label>
         <label>Focus <select id="focus"><option value="">Any player</option></select></label>
+        <label>Your metric <select id="metric">
+          <option value="">None</option>
+          <option value="control">Control score</option>
+          <option value="possession">Possession</option>
+          <option value="pass_completion">Pass completion</option>
+          <option value="xg">Expected goals (xG)</option>
+          <option value="shots">Shots</option>
+          <option value="win_prob">Win probability</option>
+          <option value="player_passing">Focused player's passing</option>
+        </select></label>
+        <span class="team-checks" id="teamChecks">
+          <span class="team-checks-label">Team</span>
+          <label class="team-check"><input type="checkbox" id="teamCheckA"> <span id="teamCheckLabelA">—</span></label>
+          <label class="team-check"><input type="checkbox" id="teamCheckB"> <span id="teamCheckLabelB">—</span></label>
+        </span>
       </div>
     </div>
 
@@ -364,6 +622,56 @@
           <div class="health-sub" id="healthSubB">Possession — · Pass completion —</div>
         </div>
         <span class="health-num" id="healthNumB">—</span>
+      </div>
+
+      <div class="health-advanced">
+        <div class="health-title">Win · draw · loss
+          <span class="health-note">Deterministic estimate from score + cumulative xG — not a trained model</span>
+        </div>
+        <div class="wdl-bar">
+          <div class="wdl-seg home" id="wdlHome"></div>
+          <div class="wdl-seg draw" id="wdlDraw"></div>
+          <div class="wdl-seg away" id="wdlAway"></div>
+        </div>
+        <div class="wdl-labels">
+          <span id="wdlHomeLabel">— win</span>
+          <span id="wdlDrawLabel">— draw</span>
+          <span id="wdlAwayLabel">— win</span>
+        </div>
+        <div class="ratings-row">
+          <div class="rating-card" id="ratingCardA">
+            <div class="rating-title" id="ratingNameA" role="button" tabindex="0">—</div>
+            <div class="rating-bar-row">
+              <span class="rating-bar-label">Attack</span>
+              <div class="rating-bar"><div class="rating-bar-fill atk" id="atkBarA"></div></div>
+              <b id="atkA">—</b>
+            </div>
+            <div class="rating-bar-row">
+              <span class="rating-bar-label">Defense</span>
+              <div class="rating-bar"><div class="rating-bar-fill def" id="defBarA"></div></div>
+              <b id="defA">—</b>
+            </div>
+            <div class="rating-stat">xG <b id="xgA">—</b></div>
+          </div>
+          <div class="rating-card" id="ratingCardB">
+            <div class="rating-title" id="ratingNameB" role="button" tabindex="0">—</div>
+            <div class="rating-bar-row">
+              <span class="rating-bar-label">Attack</span>
+              <div class="rating-bar"><div class="rating-bar-fill atk" id="atkBarB"></div></div>
+              <b id="atkB">—</b>
+            </div>
+            <div class="rating-bar-row">
+              <span class="rating-bar-label">Defense</span>
+              <div class="rating-bar"><div class="rating-bar-fill def" id="defBarB"></div></div>
+              <b id="defB">—</b>
+            </div>
+            <div class="rating-stat">xG <b id="xgB">—</b></div>
+          </div>
+        </div>
+        <div class="team-filter-note" id="teamFilterNote" hidden>
+          Showing <b id="teamFilterName"></b> only — player stats and shot map filtered to this team
+          <button id="teamFilterClear" type="button">Show both</button>
+        </div>
       </div>
     </div>
 
@@ -393,6 +701,10 @@
         <path d="M 70 860 A 30 30 0 0 0 40 830"></path>
       </svg>
       <div class="watermark">Match Health</div>
+      <div class="metric-pin" id="metricPin" hidden>
+        <div class="metric-pin-label" id="metricPinLabel"></div>
+        <div id="metricPinValues"></div>
+      </div>
       <div id="overlay" class="overlay">
         <div class="tag" id="tag"></div>
         <h2 id="headline"></h2>
@@ -402,6 +714,10 @@
     </div>
 
     <div class="sidebar">
+      <div class="story-panel">
+        <div class="activity-title">Story so far <span id="storyCount"></span></div>
+        <div id="storyList"><div class="empty-note">Storylines arrive before kick-off</div></div>
+      </div>
       <div class="activity-panel">
         <div class="activity-title">Agent activity <span id="activityCount">0 decisions</span></div>
         <div id="activityList"></div>
@@ -410,7 +726,33 @@
         <div class="activity-title"><span id="playerStatsTitle">Player stats</span> <span id="playerStatsCount">0 players</span></div>
         <div id="playerStatsList"><div class="empty-note">Nobody's made the news yet…</div></div>
       </div>
+      <div class="league-panel">
+        <div class="activity-title">League table <span id="leagueWeek"></span></div>
+        <table class="league-table">
+          <thead><tr><th>#</th><th class="team">Team</th><th>P</th><th>GD</th>
+            <th class="adv">xG</th><th class="adv">xGA</th><th>Pts</th><th>Form</th></tr></thead>
+          <tbody id="leagueBody"><tr><td colspan="8" class="empty-note">Waiting for kick-off</td></tr></tbody>
+        </table>
+      </div>
     </div>
+    </div>
+
+    <div class="shot-map-wrap">
+      <div class="health-title">Shot map
+        <span class="health-note">Real shot locations, both teams normalized to one attacking end · dot size = shot quality (xG)</span>
+      </div>
+      <svg class="shot-map" viewBox="0 0 68 25" preserveAspectRatio="xMidYMid meet">
+        <rect x="0" y="0" width="68" height="25" class="shot-map-pitch"></rect>
+        <rect x="13.85" y="0" width="40.3" height="16.5" class="shot-map-box"></rect>
+        <rect x="24.84" y="0" width="18.32" height="5.5" class="shot-map-box"></rect>
+        <line x1="30.34" y1="0.3" x2="37.66" y2="0.3" class="shot-map-goal"></line>
+        <g id="shotMapDots"></g>
+      </svg>
+      <div class="shot-map-legend">
+        <span><i class="legend-dot home"></i><span id="shotLegendA">—</span></span>
+        <span><i class="legend-dot away"></i><span id="shotLegendB">—</span></span>
+        <span><i class="legend-dot goal"></i>Goal</span>
+      </div>
     </div>
   </div>
 
@@ -426,7 +768,9 @@
     const pick = (msg) => {
       const mode = document.getElementById('mode').value;
       const lang = document.getElementById('lang').value;
-      return msg.variants.find(v => v.mode === mode && v.language === lang) || msg.base;
+      return msg.variants.find(v => v.mode === mode && v.language === lang)
+        || msg.variants.find(v => v.mode === mode)
+        || msg.base;
     };
 
     function shortLabel(label) {
@@ -561,8 +905,8 @@
       el.dataset.template = o.template;
 
       // The real player this moment is about (always msg.base, never a
-      // persona-relabelled variant -- see the "fan"/focus logic below).
-      // Shown right in the tag line so it's unambiguous which player the
+      // persona-relabelled variant). Shown right in the tag line so it's
+      // unambiguous which player the
       // floating possession ring (on the ambient ball marker, elsewhere on
       // the pitch) corresponds to, rather than relying on spatial proximity.
       const truePlayer = msg.base.focus_player;
@@ -604,6 +948,8 @@
         document.getElementById('teamB').textContent = names[1];
         document.getElementById('healthNameA').textContent = names[0];
         document.getElementById('healthNameB').textContent = names[1];
+        document.getElementById('teamCheckLabelA').textContent = names[0];
+        document.getElementById('teamCheckLabelB').textContent = names[1];
       }
       document.getElementById('clock').textContent = msg.show_at;
       document.getElementById('health').classList.remove('stale');
@@ -620,7 +966,156 @@
         document.getElementById('score').textContent =
           `${msg.score[teamNames[0]]} – ${msg.score[teamNames[1]]}`;
       }
+      if (msg.ratings) updateRatings(msg.ratings);
+      if (msg.win_draw_loss) updateWdl(msg.win_draw_loss);
+      if (msg.shots) updateShotMap(msg.shots);
       mergePassStats(msg.player_passes);
+      lastHealth = msg;
+      renderMetricPin();
+    }
+
+    // "Your metric" (brief: "a single performance metric a viewer cares
+    // about"). Pure view over the latest health tick -- no extra data feed.
+    let lastHealth = null;
+    const METRIC_LABEL = {
+      control: 'Control score', possession: 'Possession', pass_completion: 'Pass completion',
+      xg: 'Expected goals (xG)', shots: 'Shots', win_prob: 'Win probability',
+      player_passing: 'Passing',
+    };
+    function metricRow(cls, name, value) {
+      const row = document.createElement('div');
+      row.className = 'metric-pin-row';
+      row.innerHTML = `<i class="${cls}"></i><span class="team"></span><b></b>`;
+      row.querySelector('.team').textContent = name;
+      row.querySelector('b').textContent = value;
+      return row;
+    }
+    function renderMetricPin() {
+      const metric = document.getElementById('metric').value;
+      const pin = document.getElementById('metricPin');
+      pin.hidden = !metric;
+      if (!metric) return;
+      const label = document.getElementById('metricPinLabel');
+      const values = document.getElementById('metricPinValues');
+      label.textContent = METRIC_LABEL[metric];
+      values.replaceChildren();
+      const note = (text) => {
+        const d = document.createElement('div');
+        d.className = 'empty-note'; d.textContent = text; values.appendChild(d);
+      };
+      if (!lastHealth || !teamNames) { note('Waiting for kick-off'); return; }
+      const h = lastHealth;
+      const [A, B] = teamNames;
+      const perTeam = {
+        control: n => h.teams[n].control.toFixed(0),
+        possession: n => `${h.teams[n].possession_pct.toFixed(0)}%`,
+        pass_completion: n => `${h.teams[n].pass_completion_pct.toFixed(0)}%`,
+        xg: n => h.ratings ? h.ratings[n].xg.toFixed(2) : '—',
+        shots: n => h.ratings ? String(h.ratings[n].shots) : '—',
+      }[metric];
+      if (perTeam) {
+        values.append(metricRow('home', A, perTeam(A)), metricRow('away', B, perTeam(B)));
+      } else if (metric === 'win_prob') {
+        const w = h.win_draw_loss;
+        if (!w) { note('Not available yet'); return; }
+        values.append(metricRow('home', A, `${w.home_win_pct.toFixed(0)}%`),
+                      metricRow('draw', 'Draw', `${w.draw_pct.toFixed(0)}%`),
+                      metricRow('away', B, `${w.away_win_pct.toFixed(0)}%`));
+      } else if (metric === 'player_passing') {
+        const player = document.getElementById('focus').value;
+        if (!player) { note('Choose a player in Focus'); return; }
+        label.textContent = `${player} · passing`;
+        const p = (h.player_passes || {})[player];
+        if (!p || !p.attempts) { note('No passes yet'); return; }
+        const cls = p.team === A ? 'home' : 'away';
+        values.append(
+          metricRow(cls, 'Completed', `${p.completions}/${p.attempts}`),
+          metricRow(cls, 'Accuracy', `${Math.round(100 * p.completions / p.attempts)}%`));
+      }
+    }
+
+    function updateShotMap(shots) {
+      lastShots = shots;
+      document.getElementById('shotLegendA').textContent = teamNames[0];
+      document.getElementById('shotLegendB').textContent = teamNames[1];
+      const g = document.getElementById('shotMapDots');
+      const visible = teamFilter.length ? shots.filter(s => teamFilter.includes(s.team)) : shots;
+      if (!visible.length) { g.innerHTML = ''; return; }
+      g.innerHTML = visible.map(s => {
+        const r = (1.0 + (s.xg || 0) * 3.0).toFixed(2);
+        const teamCls = s.team === teamNames[0] ? 'home' : 'away';
+        const outcomeCls = s.is_goal ? 'goal' : (s.outcome === 'on_target' ? 'on-target' : 'off-target');
+        const label = s.is_goal ? 'GOAL' : s.outcome.replace('_', ' ');
+        const title = `${s.player || s.team} (${s.team}) — ${label}, xG ${(s.xg ?? 0).toFixed(2)}`;
+        return `<circle class="shot-dot ${teamCls} ${outcomeCls}" cx="${s.y}" cy="${105 - s.display_x}" r="${r}"><title>${title}</title></circle>`;
+      }).join('');
+    }
+
+    function updateRatings(ratings) {
+      const [a, b] = teamNames.map(n => ratings[n]);
+      document.getElementById('ratingNameA').textContent = teamNames[0];
+      document.getElementById('ratingNameB').textContent = teamNames[1];
+      document.getElementById('atkA').textContent = a.attack.toFixed(0);
+      document.getElementById('defA').textContent = a.defense.toFixed(0);
+      document.getElementById('xgA').textContent = a.xg.toFixed(2);
+      document.getElementById('atkBarA').style.width = `${a.attack}%`;
+      document.getElementById('defBarA').style.width = `${a.defense}%`;
+      document.getElementById('atkB').textContent = b.attack.toFixed(0);
+      document.getElementById('defB').textContent = b.defense.toFixed(0);
+      document.getElementById('xgB').textContent = b.xg.toFixed(2);
+      document.getElementById('atkBarB').style.width = `${b.attack}%`;
+      document.getElementById('defBarB').style.width = `${b.defense}%`;
+      applyTeamFilterStyling();
+    }
+
+    // Team filter (analyst mode): check one or more teams in the controls
+    // bar, or click a team's name in the ratings row, to scope player stats
+    // + the shot map down to those teams -- a pure client-side view filter,
+    // not a narrative/personalization change. teamFilter is an array so the
+    // same control works if a future match ever has more than two teams;
+    // checking every team (or none) is treated as "no filter" rather than
+    // trapping the viewer on a blank screen.
+    let teamFilter = [];
+    let lastShots = [];
+    function applyTeamFilter() {
+      const checked = [];
+      if (document.getElementById('teamCheckA').checked) checked.push(teamNames[0]);
+      if (document.getElementById('teamCheckB').checked) checked.push(teamNames[1]);
+      teamFilter = (checked.length === 0 || checked.length === teamNames.length) ? [] : checked;
+      document.getElementById('teamFilterNote').hidden = teamFilter.length === 0;
+      document.getElementById('teamFilterName').textContent = teamFilter.join(' + ');
+      applyTeamFilterStyling();
+      renderPlayerStats();
+      updateShotMap(lastShots);
+    }
+    // Clicking a team's name in the ratings row isolates the filter to just
+    // that team, or clears it if it was already isolated to that team.
+    function toggleTeamFilter(team) {
+      const idx = teamNames.indexOf(team);
+      const [checkA, checkB] = [document.getElementById('teamCheckA'), document.getElementById('teamCheckB')];
+      const isolated = teamFilter.length === 1 && teamFilter[0] === team;
+      checkA.checked = isolated ? false : idx === 0;
+      checkB.checked = isolated ? false : idx === 1;
+      applyTeamFilter();
+    }
+    function applyTeamFilterStyling() {
+      if (!teamNames) return;
+      const cardA = document.getElementById('ratingCardA');
+      const cardB = document.getElementById('ratingCardB');
+      const active = teamFilter.length > 0;
+      cardA.classList.toggle('filtered-in', teamFilter.includes(teamNames[0]));
+      cardA.classList.toggle('filtered-out', active && !teamFilter.includes(teamNames[0]));
+      cardB.classList.toggle('filtered-in', teamFilter.includes(teamNames[1]));
+      cardB.classList.toggle('filtered-out', active && !teamFilter.includes(teamNames[1]));
+    }
+
+    function updateWdl(wdl) {
+      document.getElementById('wdlHome').style.width = `${wdl.home_win_pct}%`;
+      document.getElementById('wdlDraw').style.width = `${wdl.draw_pct}%`;
+      document.getElementById('wdlAway').style.width = `${wdl.away_win_pct}%`;
+      document.getElementById('wdlHomeLabel').textContent = `${wdl.home_win_pct.toFixed(0)}% win`;
+      document.getElementById('wdlDrawLabel').textContent = `${wdl.draw_pct.toFixed(0)}% draw`;
+      document.getElementById('wdlAwayLabel').textContent = `${wdl.away_win_pct.toFixed(0)}% win`;
     }
 
     // Per-player pass attempts/completions -- a real running stat (every
@@ -629,6 +1124,11 @@
     function mergePassStats(playerPasses) {
       if (!playerPasses) return;
       for (const [player, p] of Object.entries(playerPasses)) {
+        // Focus dropdown previously only grew from players who'd triggered a
+        // confirmed overlay moment (registerPlayer in show()) -- a much
+        // smaller pool than everyone who's touched the ball. Pass data
+        // covers nearly the whole roster, so register here too.
+        registerPlayer(player);
         const entry = playerStats.get(player) || { team: p.team, counts: {}, total: 0, lastSeen: '0:00' };
         entry.team = p.team;
         entry.passes = { attempts: p.attempts, completions: p.completions };
@@ -698,14 +1198,18 @@
       // Casual: most-newsworthy first (moment count, recency as tiebreak).
       // Analyst: most-involved-on-the-ball first -- a quiet, reliable
       // passer matters here even with zero "stories".
-      const rows = [...playerStats.entries()].sort((x, y) => isAnalyst
+      let rows = [...playerStats.entries()];
+      if (teamFilter.length) rows = rows.filter(([, e]) => teamFilter.includes(e.team));
+      rows = rows.sort((x, y) => isAnalyst
         ? ((y[1].passes?.attempts || 0) - (x[1].passes?.attempts || 0))
         : ((y[1].total - x[1].total) || (toSeconds(y[1].lastSeen) - toSeconds(x[1].lastSeen))));
       document.getElementById('playerStatsCount').textContent =
         `${rows.length} player${rows.length === 1 ? '' : 's'}`;
-      // All 20+ players at once was the single biggest source of clutter --
-      // show a handful, let the viewer ask for the rest.
-      const capped = !playerStatsExpanded && rows.length > PLAYER_STATS_CAP;
+      // All 20+ players at once was the single biggest source of clutter for
+      // a storyline-first casual view -- show a handful there, let the
+      // viewer ask for the rest. Analyst mode wants the fuller table by
+      // default (that's the point of the mode), so skip the cap there.
+      const capped = !isAnalyst && !playerStatsExpanded && rows.length > PLAYER_STATS_CAP;
       const shown = capped ? rows.slice(0, PLAYER_STATS_CAP) : rows;
       const rowsHtml = shown.map(([player, e]) => {
             const cls = `player-stat-row${player === focusChoice ? ' focused' : ''}`
@@ -727,7 +1231,7 @@
               <div class="player-stat-badges">${badges}</div>
             </div>`;
           }).join('');
-      const toggleHtml = rows.length > PLAYER_STATS_CAP
+      const toggleHtml = (!isAnalyst && rows.length > PLAYER_STATS_CAP)
         ? `<button class="show-all-btn" id="playerStatsToggle">${capped ? `Show all ${rows.length}` : 'Show less'}</button>`
         : '';
       document.getElementById('playerStatsList').innerHTML = rows.length
@@ -751,8 +1255,66 @@
       "https://matchhealth-negotiate.redmushroom-42fc2d2c.eastus2.azurecontainerapps.io/negotiate";
     let lastMsg = null;
 
+    // Season-so-far context (table, form, top scorers), sent at kickoff and
+    // re-sent periodically for late joiners -- see run.py's season_msg.
+    function updateSeason(msg) {
+      const { season, fixture } = msg;
+      const live = [fixture.home, fixture.away];
+      const mw = document.getElementById('matchweek');
+      mw.textContent = `Matchweek ${fixture.matchweek}`;
+      mw.hidden = false;
+      document.getElementById('leagueWeek').textContent =
+        `after ${season.matchweek - 1} matchweek${season.matchweek === 2 ? '' : 's'}`;
+      document.getElementById('leagueBody').innerHTML = season.table.map(r => {
+        const gd = r.gf - r.ga;
+        const form = r.form.map(f => `<span class="form-chip ${f}">${f}</span>`).join('');
+        return `<tr class="${live.includes(r.team) ? 'live' : ''}" title="${r.style}">
+          <td>${r.pos}</td><td class="team">${r.team}</td><td>${r.p}</td>
+          <td>${gd > 0 ? '+' : ''}${gd}</td>
+          <td class="adv">${r.xg_for.toFixed(1)}</td><td class="adv">${r.xg_against.toFixed(1)}</td>
+          <td><b>${r.pts}</b></td><td><span class="form-chips">${form}</span></td></tr>`;
+      }).join('');
+    }
+
+    // Narrator agent output: one item per storyline set / checkpoint /
+    // recap, each holding every persona's version ("<mode>-<lang>"). Model
+    // text goes in via textContent, never innerHTML.
+    const narratives = new Map();
+    const STORY_WHEN = { pre_match: 'Before kick-off', checkpoint: null, recap: 'Full time' };
+    function addNarrative(item) {
+      narratives.set(item.id, item);
+      renderStory();
+    }
+    function renderStory() {
+      const mode = document.getElementById('mode').value;
+      const lang = document.getElementById('lang').value;
+      const list = document.getElementById('storyList');
+      if (!narratives.size) return;
+      list.replaceChildren();
+      for (const item of [...narratives.values()].reverse()) {
+        const v = item.variants[`${mode}-${lang}`] || item.variants[`${mode}-en`]
+          || Object.values(item.variants)[0];
+        const el = document.createElement('div');
+        el.className = `story-item ${item.kind === 'recap' ? 'recap' : ''}`;
+        const when = document.createElement('div');
+        when.className = 'when';
+        when.textContent = STORY_WHEN[item.kind] || item.show_at;
+        const h = document.createElement('h3');
+        h.textContent = v.title;
+        el.append(when, h, ...v.lines.map(line => {
+          const p = document.createElement('p'); p.textContent = line; return p;
+        }));
+        list.appendChild(el);
+      }
+      document.getElementById('storyCount').textContent =
+        `${narratives.size} update${narratives.size === 1 ? '' : 's'}`;
+    }
+
     function onMessage(raw) {
       const msg = JSON.parse(raw);
+      if (msg.narrative) { addNarrative(msg.narrative); return; }
+      if (msg.narratives) { msg.narratives.forEach(n => narratives.set(n.id, n)); renderStory(); return; }
+      if (msg.season) { updateSeason(msg); return; }
       if (msg.teams) { updateHealth(msg); return; }
       if (msg.kind) { addActivity(msg); return; }
       if (msg.base) { lastMsg = msg; show(msg); }
@@ -783,11 +1345,40 @@
     }
     connect();
 
+    // Casual and Analyst are genuinely different views (brief-driven: casual
+    // = storyline-first pitch, analyst = stats-dense hero), not just a
+    // content swap inside the same layout -- this attribute drives the CSS
+    // that reshapes .main-grid, panel sizing and number emphasis below.
+    function applyModeLayout() {
+      document.body.dataset.mode = document.getElementById('mode').value;
+    }
+    applyModeLayout();
+    document.getElementById('mode').addEventListener('change', applyModeLayout);
     document.getElementById('mode').addEventListener('change', renderPlayerStats);
     document.getElementById('focus').addEventListener('change', renderPlayerStats);
+    document.getElementById('focus').addEventListener('change', renderMetricPin);
+    document.getElementById('metric').addEventListener('change', renderMetricPin);
+    document.getElementById('mode').addEventListener('change', renderStory);
+    document.getElementById('lang').addEventListener('change', renderStory);
     for (const id of ['mode', 'lang', 'focus']) {
       document.getElementById(id).addEventListener('change', () => lastMsg && show(lastMsg));
     }
+
+    document.getElementById('ratingNameA').addEventListener('click', () => teamNames && toggleTeamFilter(teamNames[0]));
+    document.getElementById('ratingNameB').addEventListener('click', () => teamNames && toggleTeamFilter(teamNames[1]));
+    document.getElementById('ratingNameA').addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); teamNames && toggleTeamFilter(teamNames[0]); }
+    });
+    document.getElementById('ratingNameB').addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); teamNames && toggleTeamFilter(teamNames[1]); }
+    });
+    document.getElementById('teamFilterClear').addEventListener('click', () => {
+      document.getElementById('teamCheckA').checked = false;
+      document.getElementById('teamCheckB').checked = false;
+      applyTeamFilter();
+    });
+    document.getElementById('teamCheckA').addEventListener('change', applyTeamFilter);
+    document.getElementById('teamCheckB').addEventListener('change', applyTeamFilter);
   </script>
 </body>
 </html>

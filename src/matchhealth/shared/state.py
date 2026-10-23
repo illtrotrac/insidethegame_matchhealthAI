@@ -27,7 +27,9 @@ class InMemoryStore:
         return self._data.get(moment_id, {})
 
     def moments(self) -> list[dict]:
-        return list(self._data.values())
+        # Narrator documents (pre-match, checkpoints, recap) share the store
+        # but aren't moments; only trigger-backed docs are.
+        return [d for d in self._data.values() if "trigger" in d]
 
 
 class CosmosStore:
@@ -55,7 +57,7 @@ class CosmosStore:
 
     def moments(self) -> list[dict]:
         return list(self._c.query_items(
-            "SELECT * FROM c WHERE c.match_id = @m",
+            "SELECT * FROM c WHERE c.match_id = @m AND IS_DEFINED(c.trigger)",
             parameters=[{"name": "@m", "value": self._match_id}],
             partition_key=self._match_id,
         ))

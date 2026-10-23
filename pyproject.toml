@@ -11,6 +11,7 @@ dependencies = [
   "pydantic>=2.6",
   "jsonschema>=4.21",
   "python-dotenv>=1.0",
+  "agent-framework-core>=1.23,<2",  # Microsoft Agent Framework: orchestrates the crew
 ]
 
 [project.optional-dependencies]
