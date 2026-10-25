@@ -85,6 +85,39 @@ def _roster(name: str, used: set[str]) -> tuple[tuple[str, ...], tuple[str, ...]
     return (fixed, names) if fixed else (names[:11], names[11:])
 
 
+# Kits, fictional like the clubs: (shirt colour, text colour that reads on the
+# page's dark base). The page takes its team colours from the two kits on show.
+KITS = {
+    "Kingsmere City": {"home": ("#5B2A86", "#C9A7FF"), "away": ("#E8B931", "#F2C94C")},
+    "Riverside FC": {"home": ("#0F7C7A", "#4FD1C5"), "away": ("#F2F2F2", "#F2F2F2")},
+    "Hollowbrook Athletic": {"home": ("#FF7A2E", "#FF8A47"), "away": ("#2F80ED", "#6FA8FF")},
+    "Ashvale Wanderers": {"home": ("#1E6B3A", "#5FD39A"), "away": ("#EDE6D6", "#EDE6D6")},
+    "Redfern Albion": {"home": ("#C1272D", "#FF6B6B"), "away": ("#1B2A5C", "#8FA8FF")},
+    "Northgate United": {"home": ("#1B2A5C", "#7CA4FF"), "away": ("#C6E94B", "#C6E94B")},
+    "Saltmarsh Rovers": {"home": ("#1F6FB2", "#5AA9F0"), "away": ("#F4D03F", "#F4D03F")},
+    "Port Calder Town": {"home": ("#7A1F3D", "#FF7A9C"), "away": ("#2E7D32", "#7FD35F")},
+}
+CLASH_DISTANCE = 90  # RGB distance under which two kits are too alike to tell apart
+
+
+def _rgb(hex_colour: str) -> tuple[int, ...]:
+    return tuple(int(hex_colour[i:i + 2], 16) for i in (1, 3, 5))
+
+
+def _clash(a: str, b: str) -> bool:
+    return sum((x - y) ** 2 for x, y in zip(_rgb(a), _rgb(b), strict=True)) ** 0.5 < CLASH_DISTANCE
+
+
+def match_kits(home: str, away: str) -> dict[str, dict]:
+    """The kits on show: the home side in its home kit; the away side in its
+    home kit unless the two clash, then in its away kit, as in real football."""
+    h, a, worn = KITS[home]["home"], KITS[away]["home"], "home"
+    if _clash(h[0], a[0]) or _clash(h[1], a[1]):
+        a, worn = KITS[away]["away"], "away"
+    return {home: {"kit": "home", "shirt": h[0], "ink": h[1]},
+            away: {"kit": worn, "shirt": a[0], "ink": a[1]}}
+
+
 def _build_league() -> tuple[Club, ...]:
     used: set[str] = set()
     return tuple(Club(n, st, s, p, t, d, *_roster(n, used)) for n, st, s, p, t, d in _CLUB_DEFS)

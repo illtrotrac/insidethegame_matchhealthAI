@@ -152,6 +152,18 @@ def test_chosen_fixture_by_partial_name():
             MatchConfig(seed=5, **bad)
 
 
+def test_kits_on_show_never_clash():
+    from itertools import permutations
+
+    from matchhealth.replay.league import KITS, _clash, match_kits
+    names = [c.name for c in LEAGUE]
+    assert set(KITS) == set(names)
+    for home, away in permutations(names, 2):
+        kits = match_kits(home, away)
+        assert kits[home]["kit"] == "home"
+        assert not _clash(kits[home]["ink"], kits[away]["ink"]), (home, away)
+
+
 def test_substitutions_are_realistic():
     for seed in range(20):
         cfg = MatchConfig(seed=seed)

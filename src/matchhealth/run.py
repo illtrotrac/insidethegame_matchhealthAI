@@ -21,7 +21,7 @@ from matchhealth.engine.analytics import MatchAnalytics
 from matchhealth.engine.stats import win_draw_loss
 from matchhealth.engine.thresholds import ThresholdDetector
 from matchhealth.replay.generator import MatchConfig, generate_match
-from matchhealth.replay.league import CLUBS, POSITIONS, lineup_for
+from matchhealth.replay.league import CLUBS, POSITIONS, lineup_for, match_kits
 from matchhealth.replay.replayer import replay
 from matchhealth.replay.season import season_context
 from matchhealth.shared.models import clock
@@ -54,7 +54,7 @@ async def main(seed: int, speed: float, preview: bool = False,
     season_msg = {"season": {k: v for k, v in season.items()
                              if k not in ("results", "player_goals")},
                   "fixture": {"home": home.name, "away": away.name, "matchweek": cfg.matchweek,
-                              "speed": speed,
+                              "speed": speed, "kits": match_kits(home.name, away.name),
                               "squads": {t.name: squad(t.name, cfg.matchweek)
                                          for t in (home, away)}}}
     detector = ThresholdDetector((home.name, away.name),
