@@ -39,7 +39,8 @@
 | Run the match and agents | Container Apps jobs (scale to zero) | AKS has a fixed cluster cost |
 | Event hand-off | In-process | Event Hubs bills hourly; one process per match needs no broker |
 | Shared agent state, audit, live snapshot | Cosmos DB free tier (1,000 RU/s) | None needed |
-| Push to viewers | Web PubSub free tier | Polling adds latency |
+| Push to viewers | Web PubSub Standard (the free tier's 20,000 messages a day ran out with a few viewers) | Polling adds latency |
+| Catch-up for late joiners | Blob Storage: `snapshot.json`, saved every minute | None needed |
 | Browser tokens | A small Container App (`negotiate_service.py`), scale to zero | No keys in the browser |
 | Frontend | Static Web Apps free | None needed |
 | Models | Foundry: `gpt-4.1-mini` (nano requests routed to mini until nano quota is granted) | Bigger models aren't needed for formatting |
@@ -50,7 +51,8 @@ Not yet wired: Application Insights tracing (provisioned in Bicep, not emitted b
 
 - **Real-model match:** about 25–35 triggers × (Spotter + Analyst + Producer + one Personaliser call) + 9 Narrator calls, roughly **US$0.10–0.25** per match with mini. This is an estimate.
 - **Public demo:** mock mode, so $0 model cost. Compute is about US$3–5 for the whole judging window at 0.25 vCPU after the free grants (also an estimate).
-- Cosmos DB, Web PubSub, Static Web Apps and the negotiate service stay in free tiers. Watch Web PubSub's 20,000 messages a day.
+- Web PubSub Standard is about US$1.60 a day, roughly US$26 for the judging window. Cosmos DB, Static Web Apps and the negotiate service stay in free tiers.
+- If sends are refused anyway, the match carries on: each send fails fast and the next catch-up fills the gap.
 
 ## Avoid
 

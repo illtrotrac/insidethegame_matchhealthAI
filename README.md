@@ -62,12 +62,15 @@ More: [architecture and costs](docs/architecture.md) · [agent workflow](docs/ag
 | Agent orchestration | **Microsoft Agent Framework** (`agent-framework-core`): Workflow, Executors, conditional edges |
 | Run the match and the agents | **Azure Container Apps** jobs (scheduled demo, on-demand real-model runs), scale to zero |
 | Shared agent state, audit, live snapshot | **Azure Cosmos DB** (free tier) |
-| Push to viewers | **Azure Web PubSub** (free tier) |
+| Push to viewers | **Azure Web PubSub** (Standard) |
+| Instant catch-up for late joiners | **Azure Blob Storage**: the live snapshot, saved every minute |
 | Frontend | **Azure Static Web Apps** (free tier) |
 | Token service for browsers | Container App (`negotiate_service.py`) |
 | CI/CD | **GitHub Actions**: tests, container image to GHCR, site deploy |
 
 No API keys anywhere: every service is reached through **managed identity**.
+
+The demo video's voiceover was generated with **Azure AI Speech**.
 
 ## Can you trust what it says?
 
