@@ -21,6 +21,18 @@ from matchhealth.shared.state import InMemoryStore
 SCHEMA = json.loads((Path(__file__).parents[1] / "schemas/overlay.schema.json").read_text())
 
 
+def test_failed_send_does_not_stop_the_match(capsys):
+    from matchhealth.agents.publisher import safe_sender
+
+    def refuse(payload, content_type):
+        raise RuntimeError("quota exceeded")
+
+    send = safe_sender(refuse)
+    send({"a": 1})
+    send({"a": 2})
+    assert capsys.readouterr().out.count("send failed") == 1
+
+
 def test_generator_is_deterministic_and_realistic():
     a, b = generate_match(MatchConfig(seed=3)), generate_match(MatchConfig(seed=3))
     assert [e.model_dump() for e in a] == [e.model_dump() for e in b]
