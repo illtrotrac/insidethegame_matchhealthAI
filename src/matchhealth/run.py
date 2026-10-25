@@ -109,8 +109,16 @@ async def main(seed: int, speed: float, preview: bool = False,
 
     narrator = Narrator(store, llm, list(DEFAULT_PERSONAS), season_msg["fixture"], season,
                         send=raw_send)
+    # Every Spotter decision, kept so a viewer who joins late can rebuild the
+    # key moments, player tallies and activity feed from the catch-up.
+    activity_log: list[dict] = []
+
+    async def activity_send(decision: dict) -> None:
+        activity_log.append(decision)
+        await raw_send(decision)
+
     crew = Orchestrator(store, publish, llm, personas=list(DEFAULT_PERSONAS),
-                        activity_send=raw_send, narrator=narrator)
+                        activity_send=activity_send if raw_send else None, narrator=narrator)
     print(f"Matchweek {cfg.matchweek}: {home.name} vs {away.name} — {len(events)} synthetic "
           f"events, mock={mock_enabled()}")
 
@@ -168,6 +176,7 @@ async def main(seed: int, speed: float, preview: bool = False,
             **season_msg, "status": status, "next_kickoff_in_s": next_kickoff_in_s,
             "health": {**last_health, **health_payload(t, heavy=True)} if last_health else None,
             "pulse": pulse, "goals": goals, "narratives": narrator.log,
+            "activity": activity_log,
             "last_overlay": last_overlay or None, "audit": audit or None,
         }
         await raw_send({"catchup": catchup})

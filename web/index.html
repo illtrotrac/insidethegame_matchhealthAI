@@ -52,6 +52,13 @@
     .pill { border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: .85rem; }
     .pill.next { border-color: var(--home); color: var(--ink); }
     .sim-note { font-size: .8rem; color: var(--ink-dim); }
+    /* Key moments so far: what a late arrival missed, at a glance, under the score. */
+    .so-far { list-style: none; margin: 0; padding: 2px 0 8px; display: flex; flex-wrap: wrap; gap: 6px 18px;
+      font-size: .95rem; }
+    .so-far li { display: inline-flex; align-items: center; gap: 7px; }
+    .so-far .min { font-weight: 800; }
+    .so-far .home { color: var(--home); } .so-far .away { color: var(--away); }
+    .so-far .more { color: var(--ink-dim); }
     .view-row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding-block: 8px 16px; }
     .seg { display: inline-flex; background: var(--panel-2); border-radius: 999px; padding: 4px; }
     .seg button { border: 0; background: transparent; color: var(--ink-dim); font-weight: 600; font-size: .95rem;
@@ -246,7 +253,7 @@
     .act .r { font-size: .88rem; color: var(--ink-dim); font-style: italic; }
 
     /* ---- loading, joined note, full screen, comparisons, AI summary -------- */
-    .joined { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); z-index: 50;
+    .joined { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 50;
       background: var(--ink); color: var(--bg); font-weight: 700; border-radius: 999px; padding: 10px 18px;
       box-shadow: 0 8px 24px rgba(0,0,0,.4); font-size: .95rem; }
     .loading-bar { height: 4px; border-radius: 2px; background: rgba(238,241,232,.1); overflow: hidden; width: 220px; }
@@ -308,6 +315,7 @@
           <span class="sim-note" id="simNote" hidden></span>
         </div>
       </div>
+      <ol class="so-far" id="soFar" aria-label="Key moments so far" hidden></ol>
       <div class="view-row" role="group" aria-label="Your view">
         <div class="seg" role="group" aria-label="Mode">
           <button type="button" data-mode-btn="casual" aria-pressed="true">Casual</button>
@@ -664,7 +672,7 @@
       const min = Math.floor(toSeconds(showAt) / 60);
       if (min >= 2) {
         const el = $('joined');
-        el.textContent = `You joined at ${min}'. The story so far is below.`;
+        el.textContent = `You joined at ${min}'. Key moments so far are under the score.`;
         el.hidden = false;
         setTimeout(() => { el.hidden = true; }, 6000);
       }
@@ -769,7 +777,33 @@
     $('statsToggle').addEventListener('click', () => { statsExpanded = !statsExpanded; renderStats(); });
 
     // ---- activity + tallies -------------------------------------------------------------
+    // Key moments so far (goals, cards, big chances), rebuilt from the
+    // catch-up's decision log for viewers who arrive mid-match.
+    const KEY_KINDS = new Set(['goal', 'foul', 'big_chance']);
+    let keyMoments = [];
+    const seenActivity = new Set();
+    function renderSoFar() {
+      const list = $('soFar');
+      list.hidden = !keyMoments.length;
+      const shown = keyMoments.slice(-8), earlier = keyMoments.length - shown.length;
+      list.innerHTML = (earlier ? `<li class="more">${earlier} earlier</li>` : '') + shown.map(a => {
+        const icon = a.kind === 'foul' ? (a.priority === 1 ? ICON.red : ICON.yellow) : ICON[a.kind];
+        const side = teamNames && a.team === teamNames[1] ? 'away' : 'home';
+        const label = a.kind === 'big_chance' ? `Big chance, ${a.player || a.team}` : (a.player || a.team);
+        return `<li>${icon}<span class="min">${Math.floor(toSeconds(a.show_at) / 60)}'</span><span class="${side}">${esc(label)}</span></li>`;
+      }).join('');
+    }
+    function heroFromMoment(a) {
+      $('nowTag').innerHTML = `<b>${esc(a.show_at)}</b><span>${esc(KIND_LABEL[a.kind] || a.kind)}</span>`;
+      $('nowHead').textContent = a.player ? `${KIND_LABEL[a.kind]}: ${a.player}, ${a.team}` : `${KIND_LABEL[a.kind]}: ${a.team}`;
+      $('nowSub').textContent = 'The latest key moment before you joined. The next one will be explained here as it happens.';
+      $('nowChips').innerHTML = '';
+    }
+
     function addActivity(a) {
+      if (seenActivity.has(a.moment_id)) return;  // live message and catch-up can both carry it
+      seenActivity.add(a.moment_id);
+      if (a.confirmed && KEY_KINDS.has(a.kind)) { keyMoments.push(a); renderSoFar(); }
       if (a.x != null) momentLoc.set(a.moment_id, { x: a.x, y: a.y });
       activityCount++;
       $('activityCount').textContent = `${activityCount} decision${activityCount === 1 ? '' : 's'}`;
@@ -983,6 +1017,7 @@
       trailLine.setAttribute('points', '');
       $('activityList').innerHTML = ''; $('activityCount').textContent = '0 decisions';
       renderAudit(null);
+      seenActivity.clear(); keyMoments = []; renderSoFar();
       $('storyList').innerHTML = '<div></div><div class="empty">Storylines arrive before kick-off.</div>';
       const f = $('focus'); while (f.options.length > 1) f.remove(1);
     }
@@ -1007,7 +1042,13 @@
       }
       c.narratives.forEach(n => narratives.set(n.id, n));
       renderStory();
-      if (c.last_overlay && !lastMsg) lastMsg = c.last_overlay;
+      (c.activity || []).forEach(addActivity);  // key moments, tallies, feed, moment positions
+      if (c.last_overlay && !lastMsg) {
+        lastMsg = c.last_overlay;
+        show(lastMsg, false);  // the hero and On air show the latest moment straight away
+      } else if (!lastMsg && keyMoments.length) {
+        heroFromMoment(keyMoments[keyMoments.length - 1]);
+      }
       showNextKickoff(c.status, c.next_kickoff_in_s);
       renderAudit(c.audit);
       if (mode() === 'analyst') renderChart();
