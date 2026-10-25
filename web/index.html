@@ -1169,18 +1169,21 @@
       const top = () => scrollTo({ top: 0, behavior: 'smooth' });
       const SCENES = [
         [0, () => { setMode('casual'); set('lang', 'en'); set('focus', ''); set('metric', ''); top(); }],
-        [40, () => to('.p-lineups')], [52, () => top()],
-        [60, () => { setMode('analyst'); tab('xg'); }], [72, () => tab('wp')], [82, () => tab('ppda')],
-        [92, () => { set('focus'); tab('profile'); }], [104, () => { set('metric', 'player_passing'); tab('zones'); }],
-        [114, () => { tab('hard'); if (!aiOpen) $('aiBtn').click(); }], [124, () => { set('lang', 'de'); to('.p-stats'); }],
-        [136, () => { top(); set('lang', 'en'); tab('shots'); }],
-        [146, () => { setMode('casual'); set('focus', ''); set('metric', ''); if (aiOpen) $('aiBtn').click(); }],
+        [12, () => to('.p-story')], [22, () => to('.p-league')], [30, () => to('.p-lineups')],
+        [42, () => to('.p-activity')], [52, () => { top(); set('lang', 'es'); }], [58, () => set('lang', 'fr')],
+        [64, () => { set('lang', 'en'); setMode('analyst'); tab('xg'); }], [74, () => tab('wp')], [82, () => tab('ppda')],
+        [90, () => tab('tilt')], [98, () => { set('focus'); tab('profile'); }],
+        [108, () => { set('metric', 'player_passing'); tab('zones'); }], [116, () => tab('hard')],
+        [124, () => { if (!aiOpen) $('aiBtn').click(); }], [134, () => { set('lang', 'de'); to('.p-stats'); }],
+        [144, () => { top(); set('lang', 'en'); tab('shots'); }],
+        [152, () => { if (!$('teamCheckA').checked) $('teamCheckA').click(); to('.p-stats'); }],
+        [162, () => { if ($('teamCheckA').checked) $('teamCheckA').click(); setMode('casual'); set('focus', ''); set('metric', ''); if (aiOpen) $('aiBtn').click(); top(); }],
       ];
-      const LOOP = 160;
+      const LOOP = 176;
       let start = null, done = new Set(), loop = 0, finished = false;
       setInterval(() => {
         if (!teamNames || finished) return;
-        if (narratives.has('n-recap')) { finished = true; setMode('casual'); set('lang', 'en'); set('focus', ''); set('metric', ''); setTimeout(() => to('.p-story'), 600); return; }
+        if (narratives.has('n-recap')) { finished = true; setMode('casual'); set('lang', 'en'); set('focus', ''); set('metric', ''); setTimeout(() => to('.p-story'), 600); setTimeout(() => to('.p-activity'), 12000); return; }
         start ??= Date.now();
         const t = (Date.now() - start) / 1000 - loop * LOOP;
         if (t >= LOOP) { loop++; done = new Set(); return; }
