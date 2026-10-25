@@ -75,7 +75,7 @@ Accuracy is checked in code, on every live match, not just promised in a prompt.
 
 - **Grounding guard** ([`agents/grounding.py`](src/matchhealth/agents/grounding.py)): every number in AI-written text must appear in the facts that agent received. An invented number ("his 7th goal" when the facts say 6) is blocked. The text falls back to a template written from the same facts, and the rejection is recorded.
 - **Full-time pipeline audit** ([`audit.py`](src/matchhealth/audit.py)): read back from Cosmos, it checks that every confirmed moment went through every agent, or that a recorded recovery explains the gap, and that it reached viewers. The result appears on the page.
-- **33 tests**, including accuracy tests that replay the same seeded match and compare what was reported with what happened: goals, scorers and minutes, recap and check-in scores, season tallies, analytics on hand-built events, and grounding.
+- **34 tests**, including accuracy tests that replay the same seeded match and compare what was reported with what happened: goals, scorers and minutes, recap and check-in scores, season tallies, analytics on hand-built events, and grounding.
 
 ## Synthetic data, football-realistic
 
@@ -103,7 +103,7 @@ To use the real model, set the variables in [`.env.example`](.env.example) and d
 
 | Criterion | Where to look |
 |---|---|
-| Technological implementation | Deterministic engine plus agents; Agent Framework workflow; JSON-schema-validated output; 33 tests in CI; managed identity; tuned synthetic data with a season, rotation and benches |
+| Technological implementation | Deterministic engine plus agents; Agent Framework workflow; JSON-schema-validated output; 34 tests in CI; managed identity; tuned synthetic data with a season, rotation and benches |
 | Agentic design and innovation | Five agents with distinct roles; shared state in Cosmos; the Narrator works across the match from what the crew saved; recovery edges; grounding guard and audit |
 | Real-world impact | A drop-in for a broadcaster's graphics desk: [event schema](schemas/event.schema.json) in, [overlay schema](schemas/overlay.schema.json) out; costs a few cents per match; five languages from one call |
 | User experience | Two genuinely different modes, live charts, instant load mid-match, full-screen broadcast view |
