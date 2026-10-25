@@ -6,6 +6,7 @@ implementation (Cosmos DB free tier) — same interface.
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Protocol
 
@@ -51,10 +52,34 @@ def _live_container():
     return _container
 
 
+_blob = None
+
+
 def save_live_snapshot(catchup: dict) -> None:
     import time
-    _live_container().upsert_item({"id": "latest", "match_id": LIVE_PARTITION,
-                                   "saved_at": time.time(), "catchup": catchup})
+    doc = {"saved_at": time.time(), "catchup": catchup}
+    _live_container().upsert_item({"id": "latest", "match_id": LIVE_PARTITION, **doc})
+    # Also as a public static file: the page reads it at once, with no
+    # server to wake (the negotiate service scales to zero).
+    if os.environ.get("SNAPSHOT_CONTAINER_URL"):
+        _snapshot_blob().upload_blob(json.dumps(doc), overwrite=True, content_settings=_json_cache)
+
+
+def _snapshot_blob():
+    global _blob, _json_cache
+    if _blob is None:
+        from azure.identity import DefaultAzureCredential
+        from azure.storage.blob import ContainerClient, ContentSettings
+
+        container = ContainerClient.from_container_url(os.environ["SNAPSHOT_CONTAINER_URL"],
+                                                       credential=DefaultAzureCredential())
+        _blob = container.get_blob_client("snapshot.json")
+        _json_cache = ContentSettings(content_type="application/json",
+                                      cache_control="public, max-age=10")
+    return _blob
+
+
+_json_cache = None
 
 
 def load_live_snapshot() -> dict | None:

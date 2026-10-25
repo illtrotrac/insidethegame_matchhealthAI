@@ -1092,6 +1092,7 @@
     // Otherwise: a short-lived Web PubSub token from the deployed negotiate service.
     const LOCAL_PREVIEW_WS = 'ws://localhost:8765';
     const NEGOTIATE_URL = 'https://matchhealth-negotiate.redmushroom-42fc2d2c.eastus2.azurecontainerapps.io/negotiate';
+    const SNAPSHOT_URL = 'https://matchhealthsnap3097.blob.core.windows.net/live/snapshot.json';
     const params = new URLSearchParams(location.search);
     const FORCE_LOCAL = params.has('local');
     function openSocket(url) {
@@ -1101,6 +1102,9 @@
     }
     async function connect() {
       if (location.protocol !== 'file:' && !FORCE_LOCAL) {
+        // The static snapshot needs no server to wake, so it usually lands first.
+        fetch(SNAPSHOT_URL, { cache: 'no-store' }).then(r => r.ok ? r.json() : null)
+          .then(s => { if (s?.catchup && !gotData) applyCatchup(s.catchup); }).catch(() => {});
         try {
           const { url, snapshot } = await (await fetch(NEGOTIATE_URL)).json();
           if (snapshot?.catchup && !gotData) applyCatchup(snapshot.catchup);  // the match so far, at once

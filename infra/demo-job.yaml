@@ -26,3 +26,4 @@ properties:
           - {name: COSMOS_CONTAINER, value: moments}
           - {name: WEBPUBSUB_ENDPOINT, value: "https://matchhealth-pubsub.webpubsub.azure.com"}
           - {name: WEBPUBSUB_HUB, value: overlays}
+          - {name: SNAPSHOT_CONTAINER_URL, value: "https://matchhealthsnap3097.blob.core.windows.net/live"}
