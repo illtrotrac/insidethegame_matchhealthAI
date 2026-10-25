@@ -69,7 +69,10 @@
     .seg button { border: 0; background: transparent; color: var(--ink-dim); font-weight: 600; font-size: .95rem;
       padding: 9px 18px; border-radius: 999px; cursor: pointer; min-height: 40px; }
     .seg button[aria-pressed="true"] { background: var(--home-shirt); color: var(--home-on); }
-    .kit-stripe { height: 6px; background: linear-gradient(90deg, var(--home-shirt) 0 50%, var(--away-shirt) 50% 100%); }
+    .kit-stripe { display: flex; height: 6px; }
+    .kit-stripe i { flex: 1; background: var(--home-shirt); } .kit-stripe i + i { background: var(--away-shirt); }
+    .score-h1 { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; margin: 0; font-size: 1rem; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     .view-row label { display: flex; align-items: center; gap: 8px; font-size: .9rem; color: var(--ink-dim); }
     .view-row select { background: var(--panel-2); color: var(--ink); border: 1px solid rgba(238,241,232,.14);
       border-radius: 10px; padding: 9px 12px; min-height: 40px; cursor: pointer;
@@ -130,9 +133,7 @@
 
     /* ---- on air: the broadcast preview ------------------------------------ */
     .stage { position: relative; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden;
-      background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,.35) 100%),
-        repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 2px, transparent 2px 64px),
-        linear-gradient(160deg, #1d6639, #0e3a20); }
+      background: #17542f; }
     .pitch-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
     .pitch-lines * { fill: none; stroke: rgba(255,255,255,.28); stroke-width: 2.5; }
     .ball-trail { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
@@ -221,7 +222,7 @@
     tr.live td.club { color: var(--focus); font-weight: 700; }
     tr.focused td { background: rgba(201,242,124,.1); }
     tr.focused td:first-child { box-shadow: inset 3px 0 0 var(--focus); }
-    tr.dimmed { opacity: .45; }
+    tr.dimmed td { color: var(--ink-dim); }
     .form { display: inline-flex; gap: 3px; }
     .form i { width: 20px; height: 20px; border-radius: 4px; font-style: normal; font-size: .72rem; font-weight: 800;
       color: var(--bg); display: inline-flex; align-items: center; justify-content: center; }
@@ -238,7 +239,7 @@
       color: var(--ink-dim); border-radius: 10px; padding: 9px; cursor: pointer; }
 
     /* ---- line-ups ------------------------------------------------------------ */
-    .lineups { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 28px; }
+    .lineups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 28px; }
     .lu-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
     .lu-head h3 { margin: 0; font-size: 1.25rem; font-weight: 800; font-stretch: 72%; }
     .lu-row { display: grid; grid-template-columns: 38px 28px minmax(0, 1fr) 40px auto; gap: 10px; align-items: center;
@@ -279,13 +280,13 @@
     .changes { font-size: .92rem; color: var(--ink-dim); margin: 0 0 8px; line-height: 1.5; }
     .changes b { color: var(--ink); }
     .last2 { display: inline-flex; gap: 3px; }
-    .last2 i { width: 18px; height: 18px; border-radius: 4px; font-style: normal; font-size: .62rem; font-weight: 800;
+    .last2 i { min-width: 18px; height: 18px; padding: 0 3px; box-sizing: border-box; border-radius: 4px; font-style: normal; font-size: .7rem; font-weight: 800;
       display: inline-flex; align-items: center; justify-content: center; }
     .last2 .S { background: var(--ink); color: var(--bg); }
     .last2 .U { border: 1.5px solid var(--ink-dim); color: var(--ink-dim); }
     .last2 .N { background: rgba(238,241,232,.1); color: rgba(238,241,232,.5); }
-    .lu-row { grid-template-columns: 38px 28px minmax(0, 1fr) 36px 44px auto; }
-    .delta.up { color: var(--win); } .delta.down { color: var(--red); }
+    .lu-row { grid-template-columns: 38px 28px minmax(0, 1fr) 36px 52px auto; }
+    .delta.up { color: var(--win); } .delta.down { color: color-mix(in srgb, var(--red) 70%, #fff); }
     .ai-btn { border: 0; background: var(--focus); color: var(--bg); font-weight: 800; border-radius: 999px;
       padding: 8px 16px; cursor: pointer; min-height: 38px; }
     .ai-box { background: var(--panel-2); border-radius: 14px; padding: 16px 18px; border-left: 3px solid var(--focus); }
@@ -305,6 +306,15 @@
       .score { font-size: 2.6rem; } .team-name { font-size: 1.3rem; }
       .overlay { right: 4%; }
       .story { grid-template-columns: 48px minmax(0, 1fr); }
+      .panel { padding: 18px 16px; }
+      .p-now { padding: 22px 20px; }
+      .now-head { font-size: 1.65rem; }
+      .now-sub { font-size: 1.05rem; }
+      .lu-row { grid-template-columns: 34px 22px minmax(0, 1fr) 28px 52px auto; gap: 8px; }
+      .pct-row { grid-template-columns: 110px minmax(0, 1fr) 40px; }
+      .p-keys { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .key { padding: 14px 16px; } .key .v { font-size: 2.1rem; }
+      .chart-view { overflow-x: auto; } .chart-view svg { min-width: 560px; }
     }
   </style>
 </head>
@@ -312,9 +322,9 @@
   <header class="band">
     <div class="wrap">
       <div class="score-row">
-        <span class="team-name home" id="teamA">Home</span>
+        <h1 class="score-h1"><span class="team-name home" id="teamA">Home</span>
         <span class="score" id="score">0–0</span>
-        <span class="team-name away" id="teamB">Away</span>
+        <span class="team-name away" id="teamB">Away</span></h1>
         <div class="meta">
           <span><span class="live-dot" aria-hidden="true"></span><span class="clock" id="clock">0:00</span></span>
           <span class="pill" id="matchweek" hidden></span>
@@ -347,14 +357,15 @@
         </div>
       </div>
     </div>
-    <div class="kit-stripe" aria-hidden="true"></div>
+    <div class="kit-stripe" aria-hidden="true"><i></i><i></i></div>
   </header>
 
   <div class="joined" id="joined" role="status" hidden></div>
+  <div class="sr-only" id="announce" aria-live="polite"></div>
   <main class="wrap grid">
-    <article class="panel p-now" aria-live="polite">
+    <article class="panel p-now">
       <div class="now-tag" id="nowTag"><div class="loading-bar"><div></div></div></div>
-      <h1 class="now-head" id="nowHead">Connecting to the live match</h1>
+      <h2 class="now-head" id="nowHead">Connecting to the live match</h2>
       <p class="now-sub" id="nowSub">Fetching the score, the story so far and the latest moment.</p>
       <div class="chips" id="nowChips"></div>
     </article>
@@ -506,6 +517,7 @@
       $('nowSub').textContent = o.subline || '';
       $('nowChips').innerHTML = (o.stats || []).map(s => `<span class="chip">${statText(s)}</span>`).join('');
       if (!live) return;  // re-rendering for a new mode/language: keep clock and marker as they are
+      $('announce').textContent = `${base.show_at}: ${o.headline}`;
       $('clock').textContent = base.show_at;
       if (who) registerPlayer(who);
       showMarker(base.moment_id, who, o.duration_s);
@@ -830,7 +842,7 @@
       $('activityCount').textContent = `${activityCount} decision${activityCount === 1 ? '' : 's'}`;
       const item = document.createElement('div');
       item.className = `act ${a.confirmed ? 'ok' : 'no'}`;
-      item.innerHTML = `<div class="b">${a.confirmed ? '✓' : '✕'}</div><div><div><span class="h">${esc(KIND_LABEL[a.kind] || a.kind)}</span> <span class="m">P${a.priority ?? '?'}, ${esc(a.show_at)}</span></div><div class="m">${esc(a.player ? `${a.player}, ${a.team}` : a.team)}</div>${a.reason ? `<div class="r">${esc(a.reason)}</div>` : ''}</div>`;
+      item.innerHTML = `<div class="b">${a.confirmed ? '<svg width="12" height="12" viewBox="0 0 12 12" aria-label="Confirmed"><path d="M2 6.5l2.5 2.5L10 3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>' : '<svg width="12" height="12" viewBox="0 0 12 12" aria-label="Rejected"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="2"/></svg>'}</div><div><div><span class="h">${esc(KIND_LABEL[a.kind] || a.kind)}</span> <span class="m">P${a.priority ?? '?'}, ${esc(a.show_at)}</span></div><div class="m">${esc(a.player ? `${a.player}, ${a.team}` : a.team)}</div>${a.reason ? `<div class="r">${esc(a.reason)}</div>` : ''}</div>`;
       const list = $('activityList');
       list.insertBefore(item, list.firstChild);
       while (list.children.length > 20) list.removeChild(list.lastChild);
@@ -906,6 +918,13 @@
       chart = b.dataset.chart;
       document.querySelectorAll('[data-chart]').forEach(x => x.setAttribute('aria-selected', String(x === b)));
       renderChart();
+    });
+    $('chartTabs').addEventListener('keydown', e => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const tabs = [...document.querySelectorAll('[data-chart]')], i = tabs.indexOf(document.activeElement);
+      if (i < 0) return;
+      const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+      e.preventDefault(); next.focus(); next.click();
     });
     $('chartView').addEventListener('click', e => {
       const b = e.target.closest('[data-zone]'); if (!b) return;
