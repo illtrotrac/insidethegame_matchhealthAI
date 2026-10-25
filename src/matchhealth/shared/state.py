@@ -27,8 +27,8 @@ class InMemoryStore:
         return self._data.get(moment_id, {})
 
     def moments(self) -> list[dict]:
-        # Narrator documents (pre-match, checkpoints, recap) share the store
-        # but aren't moments; only trigger-backed docs are.
+        # Narrator and audit documents share the store but aren't moments;
+        # only trigger-backed docs are.
         return [d for d in self._data.values() if "trigger" in d]
 
 

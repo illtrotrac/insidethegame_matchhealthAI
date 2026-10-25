@@ -21,6 +21,7 @@ import logging
 from collections import Counter
 from collections.abc import Awaitable, Callable
 
+from matchhealth.agents.grounding import allowed_numbers, ungrounded
 from matchhealth.agents.llm import LLMClient, load_prompt, mock_enabled
 from matchhealth.agents.mock_text import KINDS, NARRATIVE, POINTS, SEP, lang_of, ordinal
 from matchhealth.shared.models import Trigger, clock
@@ -82,6 +83,7 @@ class Narrator:
         keys = keys or self.keys
         variants = {k: RENDER[kind](facts, *k.split("-", 1)) for k in keys}
         recovery = None
+        grounding = None
         if not (mock_enabled() or self.llm is None):
             try:
                 data = await asyncio.wait_for(self.llm.complete_json(
@@ -90,9 +92,22 @@ class Narrator:
                     NARRATOR_TIMEOUT_S)
                 got = _validated(data, keys)
                 missing = [k for k in keys if k not in got]
-                variants.update(got)
+                # Grounding guard: a persona whose text cites a number the facts
+                # don't contain keeps the template written from those facts.
+                allowed = allowed_numbers(facts, label, clock(t))
+                rejected = []
+                for k, v in got.items():
+                    bad = ungrounded(" ".join([v["title"], *v["lines"]]), allowed)
+                    if bad:
+                        rejected.append({"persona": k, "numbers": bad})
+                    else:
+                        variants[k] = v
+                grounding = {"checked": len(got), "rejected": rejected}
                 if missing:
                     recovery = {"reason": "incomplete", "missing": missing}
+                elif rejected:
+                    recovery = {"reason": "ungrounded",
+                                "personas": [r["persona"] for r in rejected]}
             except Exception as exc:  # timeout, bad JSON
                 recovery = {"reason": type(exc).__name__}
             if recovery:
@@ -102,6 +117,8 @@ class Narrator:
                 "variants": variants}
         self.store.put(doc_id, "facts", facts)
         self.store.put(doc_id, "narrator", item)
+        if grounding:
+            self.store.put(doc_id, "grounding", grounding)
         if recovery:
             self.store.put(doc_id, "recovery", recovery)
         self.log.append(item)
@@ -127,6 +144,8 @@ class Narrator:
         prev = next((r for r in self.season.get("results", [])
                      if r["home"] == away and r["away"] == home), None)
         return {"matchweek": self.fixture["matchweek"], "home": team(home), "away": team(away),
+                # Derived numbers the text uses must be facts too (grounding guard).
+                "points_gap": abs(rows[home]["pts"] - rows[away]["pts"]),
                 "previous_meeting": prev and {"home": prev["home"], "away": prev["away"],
                                               "score": prev["score"]}}
 

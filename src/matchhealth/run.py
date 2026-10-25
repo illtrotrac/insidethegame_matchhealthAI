@@ -16,6 +16,7 @@ from matchhealth.agents.llm import mock_enabled
 from matchhealth.agents.narrator import CHECKPOINTS, Narrator
 from matchhealth.agents.orchestrator import DEFAULT_PERSONAS, Orchestrator
 from matchhealth.agents.publisher import console_publish
+from matchhealth.audit import audit_match
 from matchhealth.engine.analytics import MatchAnalytics
 from matchhealth.engine.stats import win_draw_loss
 from matchhealth.engine.thresholds import ThresholdDetector
@@ -97,9 +98,12 @@ async def main(seed: int, speed: float, preview: bool = False,
         raw_send = webpubsub_health_sender()
 
     last_overlay: dict = {}
+    published: set[str] = set()  # moment ids that reached viewers, for the audit
+    audit: dict = {}
 
     async def publish(base, variants) -> None:
         last_overlay.update(base=base.to_wire(), variants=[v.to_wire() for v in variants])
+        published.add(base.moment_id)
         for p in publishers:
             await p(base, variants)
 
@@ -164,7 +168,7 @@ async def main(seed: int, speed: float, preview: bool = False,
             **season_msg, "status": status, "next_kickoff_in_s": next_kickoff_in_s,
             "health": {**last_health, **health_payload(t, heavy=True)} if last_health else None,
             "pulse": pulse, "goals": goals, "narratives": narrator.log,
-            "last_overlay": last_overlay or None,
+            "last_overlay": last_overlay or None, "audit": audit or None,
         }
         await raw_send({"catchup": catchup})
         if keep_snapshot:
@@ -228,6 +232,14 @@ async def main(seed: int, speed: float, preview: bool = False,
     await narrator.brief("Full time", 5400.0, live(5400.0))
     await narrator.recap(live(5400.0))
     print(f"Full time. {len(store.moments())} moments produced. Final score: {score}")
+    # Did every stage run for every moment? Checked from shared state, then shown to viewers.
+    audit.update(audit_match(store, published))
+    store.put("n-audit", "audit", audit)
+    print(f"Audit: {audit['complete']}/{audit['confirmed']} confirmed moments complete, "
+          f"{audit['recoveries']} recoveries, {audit['ungrounded_rejected']} ungrounded numbers "
+          f"rejected, issues: {audit['issues'] or 'none'}")
+    if raw_send:
+        await raw_send({"audit": audit})
     if raw_send:
         await send_health(5400.0)
         # Intermission: keep the finished match (recap, pulse, table) on screen
@@ -260,7 +272,14 @@ def cli() -> None:
                    help="Seconds to keep re-broadcasting the finished match (recap, pulse, "
                         "table) with a countdown, e.g. until the scheduled demo's next kickoff")
     p.add_argument("--list-clubs", action="store_true", help="Print the league's clubs and exit")
+    p.add_argument("--offline", action="store_true",
+                   help="Ignore Azure settings from .env (no Cosmos, Web PubSub or Foundry): "
+                        "mock agents, in-memory state, console or --preview output only")
     args = p.parse_args()
+    if args.offline:  # .env points at the live Azure resources; never touch them by accident
+        for key in ("COSMOS_ENDPOINT", "WEBPUBSUB_ENDPOINT", "FOUNDRY_ENDPOINT"):
+            os.environ.pop(key, None)
+        os.environ["MATCHHEALTH_MOCK_LLM"] = "1"
     if args.list_clubs:
         from matchhealth.replay.league import LEAGUE
         for c in LEAGUE:

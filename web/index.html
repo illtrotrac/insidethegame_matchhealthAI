@@ -279,6 +279,11 @@
     .ai-box p { margin: 0 0 6px; font-size: 1rem; line-height: 1.5; }
     .ai-box small { color: var(--ink-dim); font-size: .82rem; }
 
+    .audit { border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; font-size: .92rem; line-height: 1.5; }
+    .audit.pass { background: rgba(111,207,151,.12); border-left: 3px solid var(--win); }
+    .audit.fail { background: rgba(229,72,77,.12); border-left: 3px solid var(--red); }
+    .audit b { display: block; font-size: 1rem; }
+
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition: none !important; animation: none !important; }
     }
@@ -412,6 +417,7 @@
 
     <section class="panel p-activity" aria-label="Agent activity">
       <div class="panel-head"><h2>Agent activity</h2><span id="activityCount">0 decisions</span></div>
+      <div class="audit" id="auditBox" hidden></div>
       <div class="scroll" id="activityList"></div>
     </section>
   </main>
@@ -976,6 +982,7 @@
       narratives.clear(); seenPlayers.clear(); momentLoc.clear(); tallies.clear(); trail = [];
       trailLine.setAttribute('points', '');
       $('activityList').innerHTML = ''; $('activityCount').textContent = '0 decisions';
+      renderAudit(null);
       $('storyList').innerHTML = '<div></div><div class="empty">Storylines arrive before kick-off.</div>';
       const f = $('focus'); while (f.options.length > 1) f.remove(1);
     }
@@ -1002,6 +1009,7 @@
       renderStory();
       if (c.last_overlay && !lastMsg) lastMsg = c.last_overlay;
       showNextKickoff(c.status, c.next_kickoff_in_s);
+      renderAudit(c.audit);
       if (mode() === 'analyst') renderChart();
     }
 
@@ -1013,8 +1021,22 @@
     }
     for (const id of ['lang', 'focus', 'metric']) $(id).addEventListener('change', rerenderAll);
 
+    // Full-time pipeline audit (matchhealth/audit.py): checked from shared state.
+    function renderAudit(a) {
+      const box = $('auditBox');
+      if (!a) { box.hidden = true; return; }
+      box.hidden = false;
+      box.className = `audit ${a.passed ? 'pass' : 'fail'}`;
+      box.innerHTML = `<b>${a.passed ? 'Full-time audit passed' : 'Full-time audit found issues'}</b>` +
+        `${a.complete}/${a.confirmed} confirmed moments went through every agent and reached viewers. ` +
+        `${a.recoveries} recover${a.recoveries === 1 ? 'y' : 'ies'} handled, ` +
+        `${a.ungrounded_rejected} invented number${a.ungrounded_rejected === 1 ? '' : 's'} blocked.` +
+        (a.issues.length ? `<br>${a.issues.slice(0, 3).map(esc).join('<br>')}` : '');
+    }
+
     function onMessage(raw) {
       const msg = JSON.parse(raw);
+      if (msg.audit) return renderAudit(msg.audit);
       if (msg.catchup) return applyCatchup(msg.catchup);
       if (msg.narrative) { narratives.set(msg.narrative.id, msg.narrative); return renderStory(); }
       if (msg.narratives) { msg.narratives.forEach(n => narratives.set(n.id, n)); return renderStory(); }

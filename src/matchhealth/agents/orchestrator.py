@@ -23,7 +23,9 @@ from dataclasses import dataclass
 from agent_framework import Executor, WorkflowBuilder, WorkflowContext, handler
 
 from matchhealth.agents.crew import PRIORITY, Analyst, Personaliser, Producer, Spotter
+from matchhealth.agents.grounding import allowed_numbers, ungrounded
 from matchhealth.agents.llm import LLMClient
+from matchhealth.agents.mock_text import overlay_text
 from matchhealth.agents.narrator import Narrator
 from matchhealth.shared.models import Explanation, Overlay, Trigger, clock
 from matchhealth.shared.state import StateStore
@@ -72,6 +74,18 @@ class Recovery:
 class Produced:
     trig: Trigger
     base: Overlay
+
+
+def record_grounding(store: StateStore, moment_id: str, stage: str, numbers: list[str],
+                     persona: str | None = None) -> None:
+    """Numbers an agent wrote that its facts don't contain (agents/grounding.py)."""
+    doc = dict(store.get(moment_id).get("grounding") or {"rejected": []})
+    doc["rejected"] = [*doc["rejected"], {"stage": stage, "persona": persona, "numbers": numbers}]
+    store.put(moment_id, "grounding", doc)
+
+
+def trigger_numbers(trig: Trigger) -> set[str]:
+    return allowed_numbers(trig.facts, clock(trig.t))
 
 
 def record_recovery(store: StateStore, moment_id: str, stage: str, reason: str) -> None:
@@ -148,6 +162,14 @@ class AnalystExecutor(Executor):
             await ctx.send_message(Recovery(msg.trig, msg.priority, "analyst",
                                             type(exc).__name__))
             return
+        # Grounding guard: the explanation may cite only numbers from the facts.
+        stats = " ".join(str(s.get(k)) for s in expl.key_stats for k in ("value", "from", "to")
+                         if s.get(k) is not None)
+        bad = ungrounded(f"{expl.why} {stats}", trigger_numbers(msg.trig))
+        if bad:
+            record_grounding(self.crew.store, msg.trig.moment_id, "analyst", bad)
+            await ctx.send_message(Recovery(msg.trig, msg.priority, "analyst", "ungrounded"))
+            return
         self.crew.store.put(msg.trig.moment_id, "analyst", expl.model_dump())
         await ctx.send_message(Explained(msg.trig, msg.priority, expl))
 
@@ -200,6 +222,19 @@ class PersonaliserExecutor(Executor):
             log.warning("moment %s: personaliser failed (%s); base only",
                         msg.trig.moment_id, exc)
             variants = []
+        # Grounding guard per persona: an invented number swaps that persona's
+        # copy for the template written from the same facts.
+        allowed = trigger_numbers(msg.trig) | allowed_numbers(msg.base.to_wire())
+        trig = msg.trig
+        for i, v in enumerate(variants):
+            bad = ungrounded(f"{v.headline} {v.subline or ''}", allowed)
+            if bad:
+                record_grounding(self.crew.store, trig.moment_id, "personaliser", bad,
+                                 f"{v.mode}-{v.language}")
+                head, sub = overlay_text(trig.kind, trig.team, trig.player, trig.facts,
+                                         v.mode, v.language)
+                variants[i] = v.model_copy(update={"headline": head[:80],
+                                                   "subline": sub[:90] if sub else None})
         self.crew.store.put(msg.trig.moment_id, "personaliser", [v.to_wire() for v in variants])
         await self.crew.publish(msg.base, variants)
         await ctx.yield_output(msg.base)
