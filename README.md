@@ -111,7 +111,7 @@ To use the real model, set the variables in [`.env.example`](.env.example) and d
 
 ## Honest limitations
 
-- **The public demo runs in mock mode** to stay free during judging: the same pipeline, with hand-written templates instead of model calls, in all five languages. The real Foundry-backed crew runs on demand (`matchhealth-replay` job) and is what the video shows.
+- **The public demo runs in mock mode** to stay free during judging: the same pipeline, with hand-written templates instead of model calls, in all five languages. The demo video is recorded from this public demo. The Foundry-backed crew (gpt-4.1-mini) runs on demand with the `matchhealth-replay` job.
 - **No video auto-eventing.** Events are generated, not detected from footage. The engine consumes a plain [event schema](schemas/event.schema.json), so a real tracking or event feed could replace the generator.
 - `infra/main.bicep` documents the deployed topology but has not been re-validated end to end. The live resources were created with the Azure CLI; the demo job's definition is in [`infra/demo-job.yaml`](infra/demo-job.yaml).
 

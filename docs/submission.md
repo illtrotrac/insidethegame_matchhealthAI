@@ -20,7 +20,7 @@ Football coverage reports what happened; fans want to know why it mattered. Matc
   - Try **Casual / Analyst** at the top, **Language** (English, Español, Français, Português, Deutsch), **Follow** a player, and **Your metric**.
   - In Analyst mode, click the chart tabs and **Summarise these charts**.
   - **On air → Full screen** shows the broadcast view.
-- **The public demo runs in mock mode** (template text instead of model calls) so it stays free for the whole judging window. The demo video shows the same pipeline with the real Foundry-backed agents.
+- **The public demo runs in mock mode** (template text instead of model calls) so it stays free for the whole judging window. The demo video is recorded from this public demo; the Foundry-backed agents run the same pipeline on demand with the `matchhealth-replay` job.
 - **Run locally without Azure:** follow "Run it locally" in the README:
 
   ```
