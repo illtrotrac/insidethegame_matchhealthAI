@@ -38,7 +38,8 @@ SPOTTER_TIMEOUT_S = 10.0
 
 # Every mode x language is one persona. The Personaliser and Narrator write
 # all of them in ONE call each, so a language adds output tokens, not calls.
-# Real translations come from the model; mock mode only covers en/es.
+# Real translations come from the model; mock mode uses the hand-written
+# templates in mock_text.py, which cover all five languages.
 LANGUAGES = ["en", "es", "fr", "pt", "de"]
 DEFAULT_PERSONAS = [{"mode": m, "language": lang}
                     for lang in LANGUAGES for m in ("casual", "analyst")]
