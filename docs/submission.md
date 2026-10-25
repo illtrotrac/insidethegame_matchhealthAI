@@ -28,7 +28,7 @@ Football coverage reports what happened; fans want to know why it mattered. Matc
   python -m matchhealth.run --offline --preview --speed 20
   ```
 
-  Then open `web/index.html`. Tests: `pytest` (34 tests, including accuracy tests against the raw events).
+  Then open `web/index.html`. Tests: `pytest` (35 tests, including accuracy tests against the raw events).
 - **Code:** https://github.com/illtrotrac/insidethegame_matchhealthAI
 
 ## Category
