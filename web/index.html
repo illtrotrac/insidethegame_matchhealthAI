@@ -579,6 +579,8 @@
 
     // ---- health tick -------------------------------------------------------------
     function updateHealth(msg) {
+      // A tick from a different pair of clubs is a new match, even before its fixture message lands.
+      if (teamNames && Object.keys(msg.teams).join('|') !== teamNames.join('|')) { resetForNewMatch(); currentFixture = null; }
       if (!teamNames) {
         teamNames = Object.keys(msg.teams);
         $('teamA').textContent = teamNames[0]; $('teamB').textContent = teamNames[1];
@@ -586,7 +588,7 @@
         $('teamCheckLabelA').textContent = teamNames[0]; $('teamCheckLabelB').textContent = teamNames[1];
       }
       $('clock').textContent = msg.show_at;
-      if (msg.score) $('score').textContent = `${msg.score[teamNames[0]]}–${msg.score[teamNames[1]]}`;
+      if (msg.score) $('score').textContent = `${msg.score[teamNames[0]] ?? 0}–${msg.score[teamNames[1]] ?? 0}`;
       if (msg.shots) lastShots = msg.shots;
       if (msg.analytics) analytics = msg.analytics;
       if (msg.player_passes) { players = msg.player_passes; Object.keys(players).forEach(registerPlayer); }
